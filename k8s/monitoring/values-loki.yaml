@@ -2,7 +2,6 @@
 # Loki tuning for Raspberry Pi (ARM64)
 # Optimizing for low memory footprint, single-node setup
 
-# Configuration for the SingleBinary pod itself
 loki:
   deploymentMode: SingleBinary
   commonConfig:
@@ -23,26 +22,20 @@ loki:
           prefix: index_
           period: 24h
 
-  # Dedicated config for the single binary deployment (Nested under loki in v6)
-  singleBinary:
-    replicas: 1
-    resources:
-      requests:
-        cpu: 100m
-        memory: 256Mi
-      limits:
-        cpu: 500m
-        memory: 1024Mi
-    persistence:
-      enabled: true
-      storageClass: "nfs-client"
-      size: 50Gi
-
-# Disable resource-heavy distributed caching (not needed for simple Pi setups)
-chunksCache:
-  enabled: false
-resultsCache:
-  enabled: false
+# Dedicated config for the single binary deployment (Top-level in some v6 versions)
+singleBinary:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1024Mi
+  persistence:
+    enabled: true
+    storageClass: "nfs-client"
+    size: 50Gi
 
 # Disable SimpleScalable components (Required for SingleBinary to pass validation)
 read:
@@ -51,6 +44,12 @@ write:
   replicas: 0
 backend:
   replicas: 0
+
+# Disable resource-heavy distributed caching (not needed for simple Pi setups)
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
 
 # Re-enable Canary but with tiny resources because the chart validates its presence
 lokiCanary:
