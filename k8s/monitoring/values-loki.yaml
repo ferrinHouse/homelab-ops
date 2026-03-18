@@ -2,23 +2,17 @@
 # Loki tuning for Raspberry Pi (ARM64)
 # Optimizing for low memory footprint, single-node setup
 
+# Configuration for the SingleBinary pod itself
 loki:
-  # Use SingleBinary mode for restricted environments
   deploymentMode: SingleBinary
-  
   commonConfig:
-    # No replication needed for a single Pi node
     replication_factor: 1
-
   auth_enabled: false
-
-  # Store logs locally using filesystem to avoid S3 requirements
   storage:
     type: filesystem
     filesystem:
       chunks_directory: /var/lib/loki/chunks
       rules_directory: /var/lib/loki/rules
-
   schemaConfig:
     configs:
       - from: "2024-01-01"
@@ -29,7 +23,7 @@ loki:
           prefix: index_
           period: 24h
 
-# Dedicated config for SingleBinary deployment
+# Dedicated config for the single binary deployment
 singleBinary:
   replicas: 1
   resources:
@@ -42,21 +36,14 @@ singleBinary:
   persistence:
     enabled: true
     storageClass: "nfs-client"
-    size: 50Gi  # Increased size since it's on the NAS instead of SD card
-
-# Disable unneeded distributed components
-read:
-  replicas: 0
-write:
-  replicas: 0
-backend:
-  replicas: 0
+    size: 50Gi
 
 # Disable resource-heavy distributed caching (not needed for simple Pi setups)
 chunksCache:
   enabled: false
 resultsCache:
   enabled: false
+
 # Re-enable Canary but with tiny resources because the chart validates its presence
 lokiCanary:
   enabled: true
