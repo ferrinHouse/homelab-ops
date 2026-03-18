@@ -27,3 +27,12 @@ persistence:
   enabled: true
   storageClassName: "nfs-client"
   size: 2Gi
+
+# Enable Ingress for easy browser access
+ingress:
+  enabled: true
+  ingressClassName: traefik
+  hosts:
+    - grafana.local
+  path: /
+
