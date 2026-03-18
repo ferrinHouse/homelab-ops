@@ -1,0 +1,70 @@
+// Set internal logging level
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+// Discover all Kubernetes pods in the cluster
+discovery.kubernetes "pods" {
+  role = "pod"
+}
+
+// Relabel targets to add useful metadata and drop unneeded endpoints
+discovery.relabel "pods" {
+  targets = discovery.kubernetes.pods.targets
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_container_name"]
+    target_label  = "container"
+  }
+}
+
+// Scrape container logs using the discovered and relabeled targets
+loki.source.kubernetes "pods" {
+  targets    = discovery.relabel.pods.output
+  forward_to = [loki.process.json_logs.receiver]
+}
+
+// Process the structured JSON logs from the .NET 10 "Whiskey Tracker" app
+loki.process "json_logs" {
+  forward_to = [loki.write.local.receiver]
+
+  // Parse outer JSON fields from the .NET log payload
+  stage.json {
+    expressions = {
+      level       = "Level",
+      message     = "Message",
+      whiskeyName = "WhiskeyName",
+      query       = "Query",
+    }
+  }
+
+  // Label the extracted fields so they become indexed and searchable in Loki
+  stage.labels {
+    values = {
+      level       = "level",
+      whiskeyName = "whiskeyName",
+    }
+  }
+
+  // Optionally set the output to the extracted message rather than the full JSON
+  stage.output {
+    source = "message"
+  }
+}
+
+// Forward pipeline output to the local Loki gateway
+loki.write "local" {
+  endpoint {
+    // Service name relies on your Loki Helm release name ("loki") and namespace ("monitoring")
+    url = "http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push"
+  }
+}

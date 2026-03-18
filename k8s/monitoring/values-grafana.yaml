@@ -1,0 +1,29 @@
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    # Automatically add Loki as a default data source
+    datasources:
+      - name: Loki
+        type: loki
+        # Matches the release name and namespace "monitoring"
+        url: http://loki-gateway.monitoring.svc.cluster.local
+        access: proxy
+        isDefault: true
+        jsonData:
+          # Limit max lines to conserve browser memory and network bandwidth
+          maxLines: 1000
+
+# Grafana optimization for Pi
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Store Grafana dashboards and SQLite database on the NAS using NFS
+persistence:
+  enabled: true
+  storageClassName: "nfs-client"
+  size: 2Gi

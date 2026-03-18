@@ -1,0 +1,65 @@
+---
+# Loki tuning for Raspberry Pi (ARM64)
+# Optimizing for low memory footprint, single-node setup
+
+loki:
+  # Use SingleBinary mode for restricted environments
+  deploymentMode: SingleBinary
+  
+  commonConfig:
+    # No replication needed for a single Pi node
+    replication_factor: 1
+
+  auth_enabled: false
+
+  # Store logs locally using filesystem to avoid S3 requirements
+  storage:
+    type: filesystem
+    filesystem:
+      chunks_directory: /var/lib/loki/chunks
+      rules_directory: /var/lib/loki/rules
+
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: index_
+          period: 24h
+
+# Dedicated config for SingleBinary deployment
+singleBinary:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1024Mi
+  persistence:
+    enabled: true
+    storageClass: "nfs-client"
+    size: 50Gi  # Increased size since it's on the NAS instead of SD card
+
+# Disable unneeded distributed components
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+# Gateway provides HTTP endpoint (as used in Alloy config)
+gateway:
+  enabled: true
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi

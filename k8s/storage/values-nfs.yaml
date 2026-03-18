@@ -1,0 +1,15 @@
+nfs:
+  # The IP address or hostname of the OMV NAS
+  server: pinas.local
+  # The absolute path we configured in OMV
+  path: /srv/dev-disk-by-uuid-44477d40-c1ee-46e0-9104-14886001f78b/KubernetesLogs
+
+storageClass:
+  # We name the StorageClass 'nfs-client'
+  name: nfs-client
+  # Make it the default storage class for the cluster
+  defaultClass: true
+  
+  # Ensure reclaimed volumes are kept on the NAS but archived instead of deleted
+  reclaimPolicy: Retain
+  archiveOnDelete: true

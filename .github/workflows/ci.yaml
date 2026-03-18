@@ -1,0 +1,48 @@
+name: Deploy Monitoring Stack
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'k8s/monitoring/**'
+      - 'k8s/storage/**'
+      - '.github/workflows/ci.yaml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Add Helm Repositories
+        run: |
+          helm repo add grafana https://grafana.github.io/helm-charts
+          helm repo add nfs-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
+          helm repo update
+
+      - name: Deploy NFS Provisioner
+        run: |
+          helm upgrade --install nfs-provisioner nfs-provisioner/nfs-subdir-external-provisioner \
+            --namespace storage --create-namespace \
+            -f k8s/storage/values-nfs.yaml
+
+      - name: Deploy Loki
+        run: |
+          helm upgrade --install loki grafana/loki \
+            --namespace monitoring --create-namespace \
+            -f k8s/monitoring/values-loki.yaml
+
+      - name: Deploy Grafana
+        run: |
+          helm upgrade --install grafana grafana/grafana \
+            --namespace monitoring --create-namespace \
+            -f k8s/monitoring/values-grafana.yaml
+
+      - name: Deploy Alloy
+        run: |
+          helm upgrade --install alloy grafana/alloy \
+            --namespace monitoring --create-namespace \
+            --set-file alloy.configMap.content=k8s/monitoring/config.alloy
