@@ -52,10 +52,20 @@ write:
 backend:
   replicas: 0
 
+# Disable resource-heavy distributed caching (not needed for simple Pi setups)
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+lokiCanary:
+  enabled: false # Disable canary to save even more resources
+
 # Gateway provides HTTP endpoint (as used in Alloy config)
 gateway:
   enabled: true
   replicas: 1
+  # In SingleBinary mode, we must tell the gateway to point to the correct internal service
+  deploymentStrategy: SingleBinary
   resources:
     requests:
       cpu: 50m
