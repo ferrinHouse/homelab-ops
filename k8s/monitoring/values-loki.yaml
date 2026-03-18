@@ -2,11 +2,12 @@
 # Loki tuning for Raspberry Pi (ARM64)
 # Optimizing for low memory footprint, single-node setup
 
+deploymentMode: SingleBinary
+
 loki:
-  deploymentMode: SingleBinary
+  auth_enabled: false
   commonConfig:
     replication_factor: 1
-  auth_enabled: false
   storage:
     type: filesystem
     filesystem:
@@ -22,7 +23,7 @@ loki:
           prefix: index_
           period: 24h
 
-# Dedicated config for the single binary deployment (Top-level in some v6 versions)
+# Dedicated config for the single binary deployment
 singleBinary:
   replicas: 1
   resources:
