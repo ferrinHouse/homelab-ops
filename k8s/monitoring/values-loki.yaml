@@ -44,6 +44,14 @@ chunksCache:
 resultsCache:
   enabled: false
 
+# Disable SimpleScalable components (Required for SingleBinary to pass validation)
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
 # Re-enable Canary but with tiny resources because the chart validates its presence
 lokiCanary:
   enabled: true
