@@ -23,20 +23,20 @@ loki:
           prefix: index_
           period: 24h
 
-# Dedicated config for the single binary deployment
-singleBinary:
-  replicas: 1
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      cpu: 500m
-      memory: 1024Mi
-  persistence:
-    enabled: true
-    storageClass: "nfs-client"
-    size: 50Gi
+  # Dedicated config for the single binary deployment (Nested under loki in v6)
+  singleBinary:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 1024Mi
+    persistence:
+      enabled: true
+      storageClass: "nfs-client"
+      size: 50Gi
 
 # Disable resource-heavy distributed caching (not needed for simple Pi setups)
 chunksCache:
