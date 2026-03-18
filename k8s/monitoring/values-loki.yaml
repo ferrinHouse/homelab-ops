@@ -57,15 +57,21 @@ chunksCache:
   enabled: false
 resultsCache:
   enabled: false
+# Re-enable Canary but with tiny resources because the chart validates its presence
 lokiCanary:
-  enabled: false # Disable canary to save even more resources
+  enabled: true
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 50m
+      memory: 64Mi
 
 # Gateway provides HTTP endpoint (as used in Alloy config)
 gateway:
   enabled: true
   replicas: 1
-  # In SingleBinary mode, we must tell the gateway to point to the correct internal service
-  deploymentStrategy: SingleBinary
   resources:
     requests:
       cpu: 50m
