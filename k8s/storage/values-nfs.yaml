@@ -1,8 +1,8 @@
 nfs:
   # The IP address of the OMV NAS
   server: 192.168.1.253
-  # The absolute path we configured in OMV
-  path: /srv/dev-disk-by-uuid-44477d40-c1ee-46e0-9104-14886001f78b/KubernetesLogs
+  # The absolute path we configured in OMV (relative to /export/ for NFS)
+  path: /export/KubernetesLogs
 
 storageClass:
   # We name the StorageClass 'nfs-client'
