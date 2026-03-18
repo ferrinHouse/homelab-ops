@@ -28,11 +28,12 @@ persistence:
   storageClassName: "nfs-client"
   size: 2Gi
 
-# Enable Ingress for easy browser access
+# Enable NodePort for Nginx Proxy Manager integration
+service:
+  type: NodePort
+  nodePort: 30001
+
+# Disable Traefik ingress since we are using NPM
 ingress:
-  enabled: true
-  ingressClassName: traefik
-  hosts:
-    - grafana.local
-  path: /
+  enabled: false
 
