@@ -18,6 +18,7 @@ Welcome to the **Ferrin Homelab** infrastructure and operations repository. This
 - [Observability Stack (Loki, Alloy, Grafana)](#-observability-stack)
 - [CI/CD & GitOps Automation](#-cicd--gitops-automation)
 - [Operations & "Where Are My Files?" Runbook](#-operations--where-are-my-files-runbook)
+- [Future Architecture & Helm Migration Roadmap](#-future-architecture--helm-migration-roadmap)
 - [Security & Secrets Management](#-security--secrets-management)
 
 ---
@@ -231,6 +232,56 @@ sudo k3s kubectl get pvc -A
 # Refresh local Windows kubectl access
 # (Copy /etc/rancher/k3s/k3s.yaml from kubeprime to ~/.kube/config and replace 127.0.0.1 with 192.168.1.247)
 ```
+
+---
+
+## 🔮 Future Architecture & Helm Migration Roadmap
+
+### The Strategic Goal: 100% GitOps & Unified Helm Management
+The long-term objective for this cluster is to migrate all remaining "manual" workloads (currently deployed via loose manifests in `/home/mferrin/`) into version-controlled, Helm-managed releases in `homelab-ops`.
+
+### Architectural Decision: Where Container & Deployment Configs Live
+For custom in-house applications (**Whiskey Tracker** and **Family Travel**), homelab operations follow the standard **GitOps Separation of Concerns**:
+
+| Repository | Scope & Responsibility | Examples |
+| :--- | :--- | :--- |
+| **Application Repos**<br/>(`WhiskeyTracker`, `travel`) | **Code & Artifact Build**: Contains application source code, unit tests, Dockerfile, and CI workflows that build and push container images to a registry. | `src/`, `Dockerfile`, `.github/workflows/build.yml` |
+| **Infrastructure Repo**<br/>(`homelab-ops`) | **Deployment & Cluster Topology**: Contains Helm values, cluster ingress rules, NodePort allocations, and OMV storage bindings (`192.168.1.253:/export/...`). | `k8s/apps/whiskey/values.yaml`, `k8s/apps/travel/values.yaml` |
+
+#### Why Keep Deployment Configs in `homelab-ops`?
+1. **Cluster Portability**: Your application code should not know or care about internal LAN IPs (`192.168.1.253`), specific NFS share paths, or node names (`kube2`).
+2. **Single Source of Truth**: Rebuilding the cluster after a disaster only requires running `homelab-ops`.
+3. **Secret Containment**: Homelab database credentials and internal network topology stay inside this private infrastructure repository.
+
+### Data Safety Guarantee: The `existingClaim` Pattern
+To ensure **zero data loss** when converting existing stateful services (Plex, Mealie, NPM) to Helm:
+- Helm templates will declare `existingClaim: <pvc-name>` rather than provisioning new PVCs.
+- This forces Kubernetes to simply attach the existing, populated NFS directories on OMV (`192.168.1.253`) directly into the new Helm-managed pods.
+
+### Phased Migration Roadmap
+
+```mermaid
+graph LR
+    P1["Phase 1: Stateless Pilot<br/>(Family Travel Site)"] --> P2["Phase 2: Network & Edge<br/>(Cloudflare DDNS & NPM)"]
+    P2 --> P3["Phase 3: Media Server<br/>(Plex + Audnexus)"]
+    P3 --> P4["Phase 4: Stateful Apps<br/>(Mealie + PostgreSQL)"]
+    P4 --> P5["Phase 5: In-House Apps<br/>(Whiskey Tracker & Obsidian)"]
+    P5 --> P6["Phase 6: Unified CI/CD<br/>(Automated Deployments)"]
+```
+
+1. **Phase 1: Stateless Pilot (Family Travel Site)**:
+   - Convert `familyTravel.yaml` into a clean Helm chart under `k8s/apps/family-travel/`. Verify NodePort `30090` and local asset mounting.
+2. **Phase 2: Edge & Utilities (Cloudflare DDNS & Nginx Proxy Manager)**:
+   - Package NPM with `existingClaim: npm-pvc` so all existing SSL certificates and proxy hosts are preserved.
+3. **Phase 3: Plex Media Server**:
+   - Port the Plex deployment and Audnexus init-container into a `k8s/apps/plex/` chart, attaching `plex-config-pvc` (20Gi) and `plex-media-pvc` (1000Gi).
+4. **Phase 4: Mealie & PostgreSQL**:
+   - Backup `mealiedb` database snapshot.
+   - Deploy Mealie chart with `existingClaim` for `mealie-app-pvc` and `mealie-db-pvc`.
+5. **Phase 5: In-House Custom Apps (Whiskey Tracker & Obsidian Sync DB)**:
+   - Deploy `whiskey-web` chart referencing `whiskey-app-pv`, `whiskey-db-pv`, and `whiskey-photos-pv`.
+6. **Phase 6: Unified Pipeline Automation**:
+   - Expand `.github/workflows/ci.yaml` to monitor `k8s/apps/**` and automate `helm upgrade --install` across the entire cluster.
 
 ---
 
