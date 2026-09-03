@@ -133,7 +133,7 @@ The cluster runs `nfs-subdir-external-provisioner` with the default StorageClass
 | `whiskey-db-pv` | Static NFS | `192.168.1.253:/export/whiskey-db` | Whiskey Tracker DB | 10 Gi | RWO |
 | `whiskey-photos-pv`| Static NFS | `192.168.1.253:/export/whiskey-photos` | Whiskey Tracker Photos | 10 Gi | RWX |
 | `nfs-storage` | Static NFS | `192.168.1.253:/export/obsidian_data` | Obsidian Sync DB | 10 Gi | RWX |
-| `travel-site-pv` | HostPath / NFS | Pi local path / `/export/travel-db` | Family Travel Web Site | 1 Gi | RWX |
+| `travel-site-pv` | Static NFS | `192.168.1.253:/export/travel-db` | Travel App SQLite DB (`/app/database/travel.db`) | 1 Gi | RWX |
 
 ---
 
@@ -176,7 +176,7 @@ In Kubernetes, **a `NodePort` is accessible on every node's IP address**, regard
 - **Obsidian Sync DB**: Self-hosted CouchDB synchronization backend for Obsidian notes, persisting to `/export/obsidian_data`.
 - **Cloudflare DDNS**: Automatically keeps external DNS records synchronized with the homelab's dynamic public IP.
 - **Plex Media Server**: Media server with an init container cloning/updating the `Audnexus.bundle` plugin for audiobook metadata.
-- **Family Travel**: In-development custom web application (evolving beyond a static blog). Built directly from the `travel` repository, published to GitHub Packages as `ghcr.io/ferrinhouse/travel-site:latest`, deployed via Kustomize, and backed by persistent storage on OMV (`/export/travel-db`).
+- **Family Travel Adventures**: Modern itinerary, packing, and meal planning web application built with **Next.js 16 (App Router)**, **React 19**, and **Prisma 7** using SQLite (`travel.db`). Deployed from the `travel` repository as a standalone Alpine container (`ghcr.io/ferrinhouse/travel-site:latest`) with automatic `prisma db push` migrations on startup, backed by `/export/travel-db` on OMV, and served via NodePort `30090`.
 
 ---
 
