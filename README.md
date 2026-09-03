@@ -176,7 +176,7 @@ In Kubernetes, **a `NodePort` is accessible on every node's IP address**, regard
 - **Obsidian Sync DB**: Self-hosted CouchDB synchronization backend for Obsidian notes, persisting to `/export/obsidian_data`.
 - **Cloudflare DDNS**: Automatically keeps external DNS records synchronized with the homelab's dynamic public IP.
 - **Plex Media Server**: Media server with an init container cloning/updating the `Audnexus.bundle` plugin for audiobook metadata.
-- **Family Travel**: Lightweight static travel blog served by Nginx Alpine.
+- **Family Travel**: In-development custom web application (evolving beyond a static blog). Built directly from the `travel` repository, published to GitHub Packages as `ghcr.io/ferrinhouse/travel-site:latest`, deployed via Kustomize, and backed by persistent storage on OMV (`/export/travel-db`).
 
 ---
 
@@ -262,26 +262,24 @@ To ensure **zero data loss** when converting existing stateful services (Plex, M
 
 ```mermaid
 graph LR
-    P1["Phase 1: Stateless Pilot<br/>(Family Travel Site)"] --> P2["Phase 2: Network & Edge<br/>(Cloudflare DDNS & NPM)"]
-    P2 --> P3["Phase 3: Media Server<br/>(Plex + Audnexus)"]
-    P3 --> P4["Phase 4: Stateful Apps<br/>(Mealie + PostgreSQL)"]
-    P4 --> P5["Phase 5: In-House Apps<br/>(Whiskey Tracker & Obsidian)"]
-    P5 --> P6["Phase 6: Unified CI/CD<br/>(Automated Deployments)"]
+    P1["Phase 1: Edge Utilities<br/>(Cloudflare DDNS & NPM)"] --> P2["Phase 2: Media Services<br/>(Plex + Audnexus)"]
+    P2 --> P3["Phase 3: Stateful Apps<br/>(Mealie + PostgreSQL)"]
+    P3 --> P4["Phase 4: In-House Custom Apps<br/>(Whiskey Tracker & Travel)"]
+    P4 --> P5["Phase 5: Unified CI/CD<br/>(Automated Deployments)"]
 ```
 
-1. **Phase 1: Stateless Pilot (Family Travel Site)**:
-   - Convert `familyTravel.yaml` into a clean Helm chart under `k8s/apps/family-travel/`. Verify NodePort `30090` and local asset mounting.
-2. **Phase 2: Edge & Utilities (Cloudflare DDNS & Nginx Proxy Manager)**:
-   - Package NPM with `existingClaim: npm-pvc` so all existing SSL certificates and proxy hosts are preserved.
-3. **Phase 3: Plex Media Server**:
-   - Port the Plex deployment and Audnexus init-container into a `k8s/apps/plex/` chart, attaching `plex-config-pvc` (20Gi) and `plex-media-pvc` (1000Gi).
-4. **Phase 4: Mealie & PostgreSQL**:
-   - Backup `mealiedb` database snapshot.
-   - Deploy Mealie chart with `existingClaim` for `mealie-app-pvc` and `mealie-db-pvc`.
-5. **Phase 5: In-House Custom Apps (Whiskey Tracker & Obsidian Sync DB)**:
-   - Deploy `whiskey-web` chart referencing `whiskey-app-pv`, `whiskey-db-pv`, and `whiskey-photos-pv`.
-6. **Phase 6: Unified Pipeline Automation**:
-   - Expand `.github/workflows/ci.yaml` to monitor `k8s/apps/**` and automate `helm upgrade --install` across the entire cluster.
+1. **Phase 1: Edge & Network Utilities (Cloudflare DDNS & Nginx Proxy Manager)**:
+   - Package Cloudflare DDNS and NPM into Helm charts under `k8s/apps/`. Re-use `npm-pvc` with `existingClaim` so SSL certificates and proxy hosts remain untouched.
+2. **Phase 2: Media Services (Plex Media Server)**:
+   - Port the Plex deployment and Audnexus init-container into `k8s/apps/plex/`, binding to `plex-config-pvc` (20Gi) and `plex-media-pvc` (1000Gi).
+3. **Phase 3: Stateful Third-Party Applications (Mealie & PostgreSQL)**:
+   - Create a pre-migration backup of `mealiedb`.
+   - Port Mealie to Helm using `existingClaim` for `mealie-app-pvc` and `mealie-db-pvc`.
+4. **Phase 4: In-House Custom Workloads (Travel Site & Whiskey Tracker)**:
+   - Both **Travel** and **Whiskey Tracker** currently manage active build/deploy pipelines in their respective code repos while in active development.
+   - Once their architectures stabilize, evaluate whether to maintain their Kustomize deployment steps in their code repos or transition their release tags to Helm values in `homelab-ops`.
+5. **Phase 5: Unified Pipeline Automation**:
+   - Expand `.github/workflows/ci.yaml` to monitor `k8s/apps/**` and automate `helm upgrade --install` across all infrastructure workloads.
 
 ---
 
