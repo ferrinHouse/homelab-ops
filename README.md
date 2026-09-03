@@ -1,25 +1,23 @@
 # 🏡 Ferrin Homelab Operations (`homelab-ops`)
 
-Welcome to the **Ferrin Homelab** infrastructure and operations repository. This repository houses the Kubernetes manifests, Helm values, observability pipelines, and CI/CD automation powering a home lab built on lightweight Kubernetes (**k3s**) running on **Raspberry Pi (ARM64)** hardware, backed by an **OpenMediaVault (OMV)** Network Attached Storage (NAS) system.
+Welcome to the **Ferrin Homelab** infrastructure and operations repository. This repository houses the Kubernetes manifests, Helm values, observability pipelines, and GitOps automation powering a multi-node hybrid Kubernetes (**k3s**) cluster running on **Raspberry Pi (ARM64)** and **x86_64** hardware, backed by an **OpenMediaVault (OMV)** Network Attached Storage (NAS) system.
 
 ---
 
 ## 📑 Table of Contents
 
 - [Architecture Overview](#-architecture-overview)
-- [Hardware & Network Topology](#-hardware--network-topology)
-- [Storage Topology](#-storage-topology)
-- [Networking & Ingress](#-networking--ingress)
+- [Cluster Hardware & Node Inventory](#-cluster-hardware--node-inventory)
+- [Two Deployment Models (GitOps vs Direct Manifests)](#-two-deployment-models-gitops-vs-direct-manifests)
+- [Storage Topology & Volume Matrix](#-storage-topology--volume-matrix)
+  - [Dynamic Provisioning & OMV Folder Naming](#dynamic-provisioning--omv-folder-naming)
+  - [Comprehensive Storage Matrix](#comprehensive-storage-matrix)
+- [Networking & Ingress Routing](#-networking--ingress-routing)
 - [Service Catalog & Port Allocations](#-service-catalog--port-allocations)
 - [Workload Overview](#-workload-overview)
-  - [Plex Media Server](#plex-media-server)
-  - [Mealie & PostgreSQL](#mealie--postgresql)
-  - [Family Travel Site](#family-travel-site)
-  - [Nginx Proxy Manager](#nginx-proxy-manager)
-  - [Whiskey Tracker](#whiskey-tracker)
 - [Observability Stack (Loki, Alloy, Grafana)](#-observability-stack)
 - [CI/CD & GitOps Automation](#-cicd--gitops-automation)
-- [Operations & Runbooks](#-operations--runbooks)
+- [Operations & "Where Are My Files?" Runbook](#-operations--where-are-my-files-runbook)
 - [Security & Secrets Management](#-security--secrets-management)
 
 ---
@@ -29,282 +27,219 @@ Welcome to the **Ferrin Homelab** infrastructure and operations repository. This
 ```mermaid
 graph TD
     subgraph LAN ["Home LAN (192.168.1.0/24)"]
-        OMV["OpenMediaVault NAS<br/><b>192.168.1.253</b><br/>(NFS Shares)"]
-        RPI["Raspberry Pi (ARM64)<br/><b>k3s Cluster Node</b><br/>(Self-Hosted GitHub Runner)"]
+        OMV["OpenMediaVault NAS<br/><b>192.168.1.253</b><br/>(NFS Exports)"]
+        
+        subgraph K3sCluster ["k3s Multi-Node Cluster"]
+            NODE1["<b>kubeprime</b> (192.168.1.247)<br/>Control-Plane / Master (Pi ARM64)<br/>• GitHub Self-Hosted Runner<br/>• Loki (SingleBinary)<br/>• Mealie App<br/>• Whiskey Tracker<br/>• Obsidian Sync DB"]
+            NODE2["<b>kube2</b> (192.168.1.248)<br/>Worker Node (Pi ARM64)<br/>• Grafana (Pod)<br/>• Nginx Proxy Manager (NPM)<br/>• Mealie Database (Postgres 15)<br/>• Cloudflare DDNS"]
+            NODE3["<b>yoga-node</b> (192.168.1.249)<br/>Worker / Edge Node (x86_64)<br/>• Alloy Collector Daemon<br/>• ServiceLB Mesh"]
+        end
     end
 
-    subgraph Storage ["Storage Layer"]
-        NFS_DYN["nfs-subdir-external-provisioner<br/>StorageClass: <code>nfs-client</code><br/>(/export/KubernetesLogs)"]
-        NFS_STATIC["Static NFS PVs<br/>• /export/npm-data<br/>• /export/mealie-data/{app,db}<br/>• /export/plex-config<br/>• /export/ferrinMedia"]
-        HOST_PATH["HostPath PV<br/>/home/mferrin/familyTravel/www"]
+    subgraph Storage ["Storage Subsystem (NFS & Local)"]
+        NFS_DYN["Dynamic NFS Provisioner<br/>StorageClass: <code>nfs-client</code><br/>(/export/KubernetesLogs)"]
+        NFS_STATIC["Static NFS PVs<br/>• /export/npm-data<br/>• /export/mealie-data/{app,db}<br/>• /export/plex-config & /export/ferrinMedia<br/>• /export/whiskey-{app,db,photos}<br/>• /export/obsidian_data"]
     end
 
-    subgraph Ingress ["Ingress & Gateway Layer"]
-        NPM["Nginx Proxy Manager (NPM)<br/>Deployment & NodePort<br/>Ports: 80 (HTTP), 443 (HTTPS), 81 (Admin)"]
-    end
-
-    subgraph Workloads ["Application Workloads (Namespace: default)"]
-        PLEX["Plex Media Server<br/>(Audnexus Plugin InitContainer)"]
-        MEALIE["Mealie (Recipe Manager)<br/>+ PostgreSQL 15 DB<br/>(Gemini Flash AI + Gmail SMTP)"]
-        TRAVEL["Family Travel Web Site<br/>(Nginx Alpine static)"]
-        WHISKEY["Whiskey Tracker<br/>(.NET 10 Web Application)"]
-    end
-
-    subgraph Monitoring ["Observability Stack (Namespace: monitoring)"]
-        ALLOY["Grafana Alloy Daemon<br/>(K8s Pod Discovery + JSON Log Filter)"]
-        LOKI["Grafana Loki (SingleBinary)<br/>(TSDB v13 on NFS, Low-RAM Profile)"]
-        GRAFANA["Grafana Dashboard<br/>(NodePort 30001, Persisted on NFS)"]
+    subgraph Ingress ["Edge Routing"]
+        NPM["Nginx Proxy Manager<br/>(Runs on kube2, NodePort 80/443/81)"]
     end
 
     %% Storage Connections
     OMV -->|NFS Exports| NFS_DYN
     OMV -->|NFS Exports| NFS_STATIC
-    RPI -->|Local Disk| HOST_PATH
-    NFS_DYN -.->|Dynamic PVCs| Monitoring
-    NFS_STATIC --> Workloads
-    HOST_PATH --> TRAVEL
+    NFS_DYN -.->|monitoring-grafana-pvc-*| NODE2
+    NFS_DYN -.->|monitoring-storage-loki-*| NODE1
+    NFS_STATIC --> K3sCluster
 
-    %% Ingress Connections
-    NPM -->|Reverse Proxy| Workloads
-    NPM -->|Reverse Proxy| GRAFANA
+    %% Routing Mesh
+    NPM -->|Internal Cross-Node Routing| K3sCluster
 
-    %% Monitoring Connections
-    Workloads -.->|Pod Logs| ALLOY
-    ALLOY -->|Push /loki/api/v1/push| LOKI
-    LOKI -->|Loki DataSource| GRAFANA
+    %% Observability
+    K3sCluster -.->|Pod Logs via Alloy DaemonSet| NODE1
 ```
 
 ---
 
-## 🖥 Hardware & Network Topology
+## 🖥 Cluster Hardware & Node Inventory
 
-| Component | Identifier / IP | Details |
-| :--- | :--- | :--- |
-| **Compute Node** | Raspberry Pi (ARM64) | Runs single-node **k3s** Kubernetes cluster; host account `mferrin` (PUID/PGID `1001`/`1002`). |
-| **NAS Storage** | `192.168.1.253` | OpenMediaVault (OMV) hosting NFS exports for shared data, database backings, and media. |
-| **Cluster Distribution** | k3s | Configuration managed at `/etc/rancher/k3s/k3s.yaml`. Native Traefik ingress is bypassed in favor of NPM. |
-| **Cluster DNS** | `10.43.0.10` | Search domains: `default.svc.cluster.local`, `svc.cluster.local`, `cluster.local`. |
-| **Subnet** | `192.168.1.0/24` | Local LAN subnet accommodating homelab hardware and client devices. |
+The cluster is a multi-architecture hybrid running **k3s v1.33.4+k3s1** with **containerd v2.0.5-k3s2**:
 
----
-
-## 💾 Storage Topology
-
-The cluster utilizes a hybrid storage architecture combining **dynamic NFS provisioning**, **static NFS PersistentVolumes**, and **node-local HostPath** storage:
-
-### 1. Dynamic Provisioner (`nfs-client`)
-- **Chart**: `nfs-subdir-external-provisioner` (installed via Helm in namespace `storage`).
-- **NFS Server**: `192.168.1.253`
-- **NFS Path**: `/export/KubernetesLogs`
-- **StorageClass**: `nfs-client` (set as the default cluster `StorageClass`).
-- **Reclaim Policy**: `Retain` with `archiveOnDelete: true` to prevent accidental loss of logs and persistent state.
-
-### 2. Storage Volume Matrix
-
-| Volume Name | Storage Type | Source / Share Path | Target Application | Capacity | Reclaim Policy |
+| Node Name | IP Address | Roles | Architecture | OS & Kernel | Primary Workloads Hosted |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `nfs-npm-pv` | Static NFS | `192.168.1.253:/export/npm-data` | Nginx Proxy Manager (`/data`, `/etc/letsencrypt`) | 5 Gi | Retain |
-| `nfs-mealie-app-pv` | Static NFS | `192.168.1.253:/export/mealie-data/app` | Mealie App Data (`/app/data`) | 15 Gi | Retain |
-| `nfs-mealie-db-pv` | Static NFS | `192.168.1.253:/export/mealie-data/db` | Mealie PostgreSQL (`/var/lib/postgresql/data`) | 10 Gi | Retain |
-| `nfs-plex-config-pv` | Static NFS | `192.168.1.253:/export/plex-config` | Plex Server Config (`/config`) | 20 Gi | Retain |
-| `nfs-plex-media-pv` | Static NFS | `192.168.1.253:/export/ferrinMedia` | Plex Media Library (`/media`) | 1000 Gi | Retain |
-| `travel-site-pv` | HostPath | Local Pi path: `/home/mferrin/familyTravel/www` | Travel Site HTML (`/usr/share/nginx/html`) | 1 Gi | Retain |
-| `loki` PVC | Dynamic NFS | `nfs-client` -> `/export/KubernetesLogs` | Loki SingleBinary Storage (`/var/loki`) | 50 Gi | Retain |
-| `grafana` PVC | Dynamic NFS | `nfs-client` -> `/export/KubernetesLogs` | Grafana State & SQLite DB | 2 Gi | Retain |
+| **`kubeprime`** | `192.168.1.247` | `control-plane,master` | ARM64 (Raspberry Pi) | Debian 12 (bookworm) / `6.12.25+rpt-rpi-v8` | Self-hosted GitHub Runner, Loki, Mealie App, Whiskey Tracker, Obsidian Sync, CoreDNS |
+| **`kube2`** | `192.168.1.248` | `worker` | ARM64 (Raspberry Pi) | Debian 12 (bookworm) / `6.12.25+rpt-rpi-v8` | Grafana, Nginx Proxy Manager, Mealie DB (Postgres 15), Cloudflare DDNS, NFS Provisioner |
+| **`yoga-node`** | `192.168.1.249` | `edge,worker` | x86_64 (amd64) | Debian 13 (trixie) / `6.12.107+deb13-amd64` | Alloy collector, K3s ServiceLB proxy mesh |
 
 ---
 
-## 🌐 Networking & Ingress
+## ⚙️ Two Deployment Models (GitOps vs Direct Manifests)
 
-- **Reverse Proxy**: [Nginx Proxy Manager](https://nginxproxymanager.com/) (`jc21/nginx-proxy-manager:latest`) operates as the primary edge controller, providing SSL termination (Let's Encrypt) and hostname-based routing.
-- **Service Exposure Pattern**: Services inside the cluster are exposed primarily via `NodePort` or `LoadBalancer` (via K3s ServiceLB/Klipper), allowing Nginx Proxy Manager to forward upstream traffic.
+One of the most important architectural aspects of this homelab is that **workloads are managed under two different paradigms**:
+
+### Model A: Automated GitOps & Helm (Observability & Storage)
+- **Workloads**: `grafana`, `loki`, `alloy` (namespace `monitoring`), `nfs-subdir-external-provisioner` (namespace `storage`).
+- **Source of Truth**: This repository (`homelab-ops`) under `k8s/monitoring/` and `k8s/storage/`.
+- **How It Deploys**: A self-hosted GitHub Actions runner on `kubeprime` runs [`.github/workflows/ci.yaml`](.github/workflows/ci.yaml) on push to `main`.
+- **On-Disk Checkout on the Pi**:
+  ```text
+  /home/mferrin/actions-runner/_work/homelab-ops/homelab-ops/
+  ```
+- **Runtime Configuration**: Helm compiles values directly into Kubernetes **ConfigMaps** (`grafana`, `alloy`, `loki-runtime`) and Secret release states.
+
+### Model B: Direct Host Manifests (Application Workloads)
+- **Workloads**: `npm`, `mealie`, `plex`, `familyTravel`, `cloudflare-ddns`, `obsidian`.
+- **Source of Truth**: Direct YAML manifests located in `/home/mferrin/` on `kubeprime`:
+  - `/home/mferrin/mealie-all-in-one.yml`
+  - `/home/mferrin/npm-all-in-one.yml`
+  - `/home/mferrin/plex-deployment.yml` (and associated `plex-*.yml`)
+  - `/home/mferrin/cloudflare-ddns.yaml`
+  - `/home/mferrin/familyTravel/familyTravel.yaml`
+- **How It Deploys**: Applied manually via `sudo k3s kubectl apply -f <file>.yml`.
+
+---
+
+## 💾 Storage Topology & Volume Matrix
+
+The persistent storage backbone is a dedicated **OpenMediaVault (OMV)** NAS server at **`192.168.1.253`**.
+
+### Dynamic Provisioning & OMV Folder Naming
+
+The cluster runs `nfs-subdir-external-provisioner` with the default StorageClass **`nfs-client`** pointing to `/export/KubernetesLogs`.
+
+> [!IMPORTANT]
+> **How Dynamic Folders are Named on OMV:**  
+> When Helm or Kubernetes provisions a dynamic volume using `nfs-client`, it does **not** create a simple folder named `grafana`. Instead, it automatically generates a directory following the format:
+> `/<export-root>/<namespace>-<pvc-name>-<pv-uuid>/`
+
+| Application | Volume Claim | Exact OMV Share & Directory Path |
+| :--- | :--- | :--- |
+| **Grafana** | `monitoring/grafana` | `/export/KubernetesLogs/monitoring-grafana-pvc-ebd72568-2350-49de-8b50-c18169c3c3a2/` |
+| **Loki** | `monitoring/storage-loki-0` | `/export/KubernetesLogs/monitoring-storage-loki-0-pvc-66c40a15-8cf0-4990-ab6d-64b0b84f28c2/` |
+
+### Comprehensive Storage Matrix
+
+| Volume Name | Type | OMV / Host Path | Target Pod & Mount | Capacity | Mode |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `pvc-ebd725...` | Dynamic NFS | `192.168.1.253:/export/KubernetesLogs/monitoring-grafana-...` | Grafana (`/var/lib/grafana`) | 2 Gi | RWO |
+| `pvc-66c40a...` | Dynamic NFS | `192.168.1.253:/export/KubernetesLogs/monitoring-storage-loki-...` | Loki (`/var/loki`) | 50 Gi | RWO |
+| `nfs-npm-pv` | Static NFS | `192.168.1.253:/export/npm-data` | NPM (`/data`, `/etc/letsencrypt`) | 5 Gi | RWX |
+| `nfs-mealie-app-pv` | Static NFS | `192.168.1.253:/export/mealie-data/app` | Mealie App (`/app/data`) | 15 Gi | RWX |
+| `nfs-mealie-db-pv` | Static NFS | `192.168.1.253:/export/mealie-data/db` | Mealie Postgres (`/var/lib/postgresql/data`) | 10 Gi | RWX |
+| `nfs-plex-config-pv`| Static NFS | `192.168.1.253:/export/plex-config` | Plex Config (`/config`) | 20 Gi | RWX |
+| `nfs-plex-media-pv` | Static NFS | `192.168.1.253:/export/ferrinMedia` | Plex Media (`/media`) | 1000 Gi | RWX |
+| `whiskey-app-pv` | Static NFS | `192.168.1.253:/export/whiskey-app` | Whiskey Tracker Web | 1 Gi | RWX |
+| `whiskey-db-pv` | Static NFS | `192.168.1.253:/export/whiskey-db` | Whiskey Tracker DB | 10 Gi | RWO |
+| `whiskey-photos-pv`| Static NFS | `192.168.1.253:/export/whiskey-photos` | Whiskey Tracker Photos | 10 Gi | RWX |
+| `nfs-storage` | Static NFS | `192.168.1.253:/export/obsidian_data` | Obsidian Sync DB | 10 Gi | RWX |
+| `travel-site-pv` | HostPath / NFS | Pi local path / `/export/travel-db` | Family Travel Web Site | 1 Gi | RWX |
+
+---
+
+## 🌐 Networking & Ingress Routing
+
+### NodePort Cross-Node Mesh Behavior
+In Kubernetes, **a `NodePort` is accessible on every node's IP address**, regardless of where the pod is physically running:
+- Grafana's pod runs on **`kube2` (`192.168.1.248`)**.
+- However, pointing to **`192.168.1.247:30001` (`kubeprime`)** works seamlessly because `kube-proxy` transparently routes the packets across the internal flannel CNI network (`10.42.x.x`).
+- **Nginx Proxy Manager (NPM)** is configured as the front-door reverse proxy, handling domain names and Let's Encrypt SSL certificates before proxying upstream to these NodePorts.
 
 ---
 
 ## 📋 Service Catalog & Port Allocations
 
-| Service Name | Namespace | Type | Internal Port | External / NodePort | Description |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **NPM HTTP** | `default` | `NodePort` | `80` | `80` | HTTP traffic ingestion and ACME challenge handling. |
-| **NPM HTTPS** | `default` | `NodePort` | `443` | `443` | Secure HTTPS edge routing with automated SSL. |
-| **NPM Admin** | `default` | `NodePort` | `81` | `81` | Web UI for managing proxy hosts and certificates. |
-| **Grafana** | `monitoring` | `NodePort` | `80` | `30001` | Dashboards and observability interface. |
-| **Mealie App** | `default` | `NodePort` | `9000` | `30925` | Recipe management & meal planning web interface. |
-| **Mealie Database** | `default` | `ClusterIP` | `5432` | Internal | Dedicated PostgreSQL 15 database instance. |
-| **Family Travel** | `default` | `NodePort` | `80` | `30090` | Lightweight static travel documentation site. |
-| **Plex Web** | `default` | `LoadBalancer` | `32400` | `32400` | Plex Media Server Web UI & streaming. |
-| **Plex DLNA TCP** | `default` | `LoadBalancer` | `32469` | `32469` | DLNA client communication. |
-| **Plex DLNA UDP** | `default` | `LoadBalancer` | `1900` | `1900` | DLNA discovery protocol. |
-| **Loki Gateway** | `monitoring` | `ClusterIP` | `80` | Internal | Ingestion and query API for Loki logs. |
+| Service Name | Namespace | Node Hosted | Service Type | Internal Port | NodePort / Exposed Port | Upstream Routing URL |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Grafana** | `monitoring` | `kube2` | `NodePort` | `80` | **`30001`** | `http://192.168.1.247:30001` |
+| **Mealie App** | `default` | `kubeprime` | `NodePort` | `9000` | **`30925`** | `http://192.168.1.247:30925` |
+| **Mealie Database**| `default` | `kube2` | `ClusterIP` | `5432` | None (Internal) | `mealiedb-service:5432` |
+| **Family Travel** | `default` | `kubeprime` | `NodePort` | `80` | **`30090`** | `http://192.168.1.247:30090` |
+| **NPM HTTP/S** | `default` | `kube2` | `NodePort` | `80`, `443` | `80`, `443` | External Gateway |
+| **NPM Admin UI** | `default` | `kube2` | `NodePort` | `81` | `81` | `http://<node-ip>:81` |
+| **Plex Media Web** | `default` | `kube2` | `LoadBalancer` | `32400` | `32400` | `http://<node-ip>:32400` |
+| **Loki Gateway** | `monitoring` | `kubeprime` | `ClusterIP` | `80` | None (Internal) | `http://loki-gateway.monitoring.svc.cluster.local` |
+| **Kubernetes API** | `kube-system` | `kubeprime` | Native API | `6443` | `6443` | `https://kubeprime:6443` |
 
 ---
 
 ## 📦 Workload Overview
 
-### Plex Media Server
-- **Manifests**: [`k8s/configs/plex-*.yml`](file:///c:/Users/whwar/GitHubRepos/homelab-ops/k8s/configs/)
-- **Image**: `lscr.io/linuxserver/plex:latest`
-- **Init Container**: `fetch-audnexus` uses an `alpine/git` container to automatically clone or update the [Audnexus bundle](https://github.com/djdembeck/Audnexus.bundle.git) into `/config/Library/Application Support/Plex Media Server/Plug-ins/Audnexus.bundle` on every pod startup for enhanced audiobook metadata.
-- **Storage**: Separates heavy media assets (`/export/ferrinMedia`) from server metadata and cache (`/export/plex-config`).
+### 1. Observability Stack (`monitoring` namespace)
+- **Grafana**: Visualizations and dashboards, pinned to NodePort `30001`, dynamically backed by 2 Gi on OMV. Pre-wired with the internal Loki datasource.
+- **Loki**: Deployed in `SingleBinary` mode, TSDB v13 schema, with distributed memory caches disabled to fit comfortably within Pi RAM.
+- **Grafana Alloy**: Deployed as a `DaemonSet` running on all nodes (`kubeprime`, `kube2`, `yoga-node`). It tails all pod logs and extracts structured JSON fields (`Level`, `Message`, `WhiskeyName`, `Query`) for the Whiskey Tracker app before shipping to Loki.
 
-### Mealie & PostgreSQL
-- **Manifests**: [`k8s/configs/mealie-all-in-one.yml`](file:///c:/Users/whwar/GitHubRepos/homelab-ops/k8s/configs/mealie-all-in-one.yml)
-- **Application Image**: `ghcr.io/mealie-recipes/mealie:latest`
-- **Database**: Dedicated PostgreSQL 15 (`postgres:15`) container communicating via internal ClusterIP service `mealiedb-service:5432`.
-- **Integrations**:
-  - **AI Recipe Scraper**: Google Gemini 2.0 Flash integration configured via `OPENAI_BASE_URL` (`https://generativelanguage.googleapis.com/v1beta`).
-  - **Email Alerts**: Gmail SMTP (`smtp.gmail.com:587`) for invites and notifications.
-
-### Family Travel Site
-- **Manifest**: [`k8s/configs/familyTravel/familyTravel.yaml`](file:///c:/Users/whwar/GitHubRepos/homelab-ops/k8s/configs/familyTravel/familyTravel.yaml)
-- **Image**: `nginx:alpine`
-- **Purpose**: Minimalist static site hosting travel itineraries and photos directly from the node's local filesystem (`/home/mferrin/familyTravel/www`).
-
-### Nginx Proxy Manager
-- **Manifest**: [`k8s/configs/npm-all-in-one.yml`](file:///c:/Users/whwar/GitHubRepos/homelab-ops/k8s/configs/npm-all-in-one.yml)
-- **Image**: `jc21/nginx-proxy-manager:latest`
-- **DNS Tuning**: Explicitly configures cluster DNS (`10.43.0.10`) and upstream fallback (`8.8.8.8`) with search paths to resolve internal `.cluster.local` service addresses.
-
-### Whiskey Tracker
-- **Application**: In-house .NET 10 web application emitting structured JSON telemetry.
-- **Telemetry**: Pod logs are automatically discovered, relabeled, and extracted into indexed Loki labels (`whiskeyName`, `level`) by Grafana Alloy.
-
----
-
-## 📊 Observability Stack
-
-The monitoring infrastructure is deployed under the `monitoring` namespace, specifically tuned to operate within the memory constraints of a Raspberry Pi (ARM64).
-
-### 1. Grafana Loki (`values-loki.yaml`)
-- **Deployment Mode**: `SingleBinary` (distributed microservices scaled to 0 replicas to save resources).
-- **Index Store**: TSDB (`schema: v13`).
-- **Object Store**: Local filesystem paths mapped to NFS (`/var/loki`).
-- **Pi Optimization**: Distributed caches (`chunksCache`, `resultsCache`) are explicitly disabled.
-
-### 2. Grafana Alloy (`config.alloy`)
-- **Discovery**: Automatically discovers all running pods via the Kubernetes API and extracts namespace, pod name, and container name labels.
-- **Log Parsing**: Contains a dedicated pipeline stage for the **Whiskey Tracker** app:
-  ```alloy
-  stage.json {
-    expressions = {
-      level       = "Level",
-      message     = "Message",
-      whiskeyName = "WhiskeyName",
-      query       = "Query",
-    }
-  }
-  stage.labels {
-    values = {
-      level       = "level",
-      whiskeyName = "whiskeyName",
-    }
-  }
-  ```
-- **Forwarding**: Sends structured entries to the internal Loki gateway at `http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push`.
-
-### 3. Grafana (`values-grafana.yaml`)
-- **Datasource**: Pre-provisions the cluster Loki gateway as the default data source (`maxLines: 1000`).
-- **Persistence**: Persists dashboards and user data onto `nfs-client` (2 Gi).
-- **Access**: Exposed via NodePort `30001` for direct proxying by Nginx Proxy Manager.
+### 2. Application Services (`default` namespace)
+- **Mealie**: Recipe manager with Google Gemini 2.0 Flash AI recipe scraping and Gmail SMTP alerts. Backed by a dedicated PostgreSQL 15 pod.
+- **Whiskey Tracker**: In-house .NET 10 web application with persistent database, photos, and app shares on OMV.
+- **Obsidian Sync DB**: Self-hosted CouchDB synchronization backend for Obsidian notes, persisting to `/export/obsidian_data`.
+- **Cloudflare DDNS**: Automatically keeps external DNS records synchronized with the homelab's dynamic public IP.
+- **Plex Media Server**: Media server with an init container cloning/updating the `Audnexus.bundle` plugin for audiobook metadata.
+- **Family Travel**: Lightweight static travel blog served by Nginx Alpine.
 
 ---
 
 ## 🚀 CI/CD & GitOps Automation
 
-Automated deployments are powered by GitHub Actions using a **self-hosted runner** residing on the local homelab network:
-
-- **Workflow File**: [`.github/workflows/ci.yaml`](file:///c:/Users/whwar/GitHubRepos/homelab-ops/.github/workflows/ci.yaml)
-- **Environment**: Configured with `KUBECONFIG: /etc/rancher/k3s/k3s.yaml`.
-- **Triggers**:
-  - Push to `main` when changes touch `k8s/monitoring/**`, `k8s/storage/**`, or `.github/workflows/ci.yaml`.
-  - Manual triggers via `workflow_dispatch`.
-- **Pipeline Actions**:
-  1. Clones repository.
-  2. Updates Helm repositories (`grafana`, `nfs-provisioner`).
-  3. Upgrades/installs `nfs-subdir-external-provisioner` into namespace `storage`.
-  4. Upgrades/installs `loki` into namespace `monitoring`.
-  5. Upgrades/installs `grafana` into namespace `monitoring`.
-  6. Upgrades/installs `alloy` into namespace `monitoring` with updated `config.alloy`.
+Automated deployments are managed by GitHub Actions using a self-hosted runner operating on `kubeprime`:
+- **Runner Directory**: `/home/mferrin/actions-runner/`
+- **Workflow**: [`.github/workflows/ci.yaml`](.github/workflows/ci.yaml)
+- **Cluster Target**: Configured via `KUBECONFIG: /etc/rancher/k3s/k3s.yaml`.
+- **Automated Deployments**: Upgrades Helm charts for `nfs-provisioner`, `loki`, `grafana`, and `alloy` upon any push to `main` touching `k8s/monitoring/**` or `k8s/storage/**`.
 
 ---
 
-## 🛠 Operations & Runbooks
+## 🛠 Operations & "Where Are My Files?" Runbook
 
-### Prerequisites & Tools
-Ensure you have the following installed on your management machine or host:
-- `kubectl` configured with cluster access (`/etc/rancher/k3s/k3s.yaml`)
-- `helm` (v3+)
-- `git`
-- GitHub CLI (`gh`)
+### "Where Are My Files?" Debugging Guide
 
-### Common Operational Commands
+#### 1. Why can't I find Grafana/Loki files in `/etc/` or `/var/lib/` on my Pi?
+Containers in k3s do not run on the host's raw filesystem; they run inside `containerd` isolated overlays.
+- **To inspect files inside the running container**:
+  ```bash
+  sudo k3s kubectl exec -it -n monitoring grafana-86ccb98c8b-vqzqc -- ls -la /var/lib/grafana
+  ```
+- **To see the active configuration files (`grafana.ini`, `datasources.yaml`)**:
+  ```bash
+  sudo k3s kubectl get configmap -n monitoring grafana -o yaml
+  ```
 
-#### 1. Checking Cluster Health
+#### 2. Where is the SQLite database on OMV?
+On your OMV NAS (`192.168.1.253`), navigate to the `/export/KubernetesLogs` share:
 ```bash
-# Check node status
-kubectl get nodes -o wide
+ls -la /export/KubernetesLogs/monitoring-grafana-pvc-*
+```
+Inside you will find `grafana.db`.
 
-# Check all running pods across namespaces
-kubectl get pods -A
-
-# Check PVC and PV binding status
-kubectl get pvc -A
+#### 3. How do I inspect the active Helm values for a release?
+```bash
+sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm get values grafana -n monitoring
 ```
 
-#### 2. Deploying or Updating Application Workloads
-Applications in `k8s/configs/` are applied declaratively:
+### Routine Cluster Administration Commands
+
 ```bash
-# Apply Nginx Proxy Manager
-kubectl apply -f k8s/configs/npm-all-in-one.yml
+# Check all nodes and their status
+sudo k3s kubectl get nodes -o wide
 
-# Apply Mealie & PostgreSQL
-kubectl apply -f k8s/configs/mealie-secret.yml
-kubectl apply -f k8s/configs/mealie-all-in-one.yml
+# Check all pods across the cluster
+sudo k3s kubectl get pods -A -o wide
 
-# Apply Plex Media Server
-kubectl apply -f k8s/configs/plex-config-pv.yml
-kubectl apply -f k8s/configs/plex-config-pvc.yml
-kubectl apply -f k8s/configs/plex-media-pv.yml
-kubectl apply -f k8s/configs/plex-media-pvc.yml
-kubectl apply -f k8s/configs/plex-service.yml
-kubectl apply -f k8s/configs/plex-deployment.yml
+# Check all storage claims
+sudo k3s kubectl get pvc -A
 
-# Apply Family Travel Site
-kubectl apply -f k8s/configs/familyTravel/familyTravel.yaml
+# Refresh local Windows kubectl access
+# (Copy /etc/rancher/k3s/k3s.yaml from kubeprime to ~/.kube/config and replace 127.0.0.1 with 192.168.1.247)
 ```
-
-#### 3. Monitoring Pod Logs via Grafana Alloy & Loki
-```bash
-# View live Alloy collector logs
-kubectl logs -n monitoring -l app.kubernetes.io/name=alloy -f
-
-# View Loki server logs
-kubectl logs -n monitoring -l app.kubernetes.io/name=loki -f
-```
-
-#### 4. Backup & Disaster Recovery Runbook
-1. **OMV NFS Storage**:
-   - The primary point of persistent data is the OMV NAS (`192.168.1.253`). Scheduled snapshots or rsync tasks should be configured on OMV for `/export/mealie-data`, `/export/npm-data`, and `/export/plex-config`.
-2. **PostgreSQL Database Dump**:
-   ```bash
-   kubectl exec -it deployment/mealiedb-deployment -- pg_dump -U mealie mealiedb > mealiedb_backup_$(date +%F).sql
-   ```
-3. **Cluster Manifests**:
-   - All cluster desired state is committed to this Git repository, allowing full cluster rebuilds by re-running K3s setup and executing the CI workflow.
 
 ---
 
 ## 🔐 Security & Secrets Management
 
 > [!WARNING]
-> **Secret Hardening Notice**
-> Several configuration files (notably `k8s/configs/mealie-all-in-one.yml`) currently contain plaintext credentials for SMTP and third-party APIs (e.g., Gemini API keys and Gmail App Passwords).
-
-### Recommended Remediation Steps
-1. **Move Plaintext Keys to Kubernetes Secrets**:
-   - Extract sensitive values from `mealie-all-in-one.yml` into Kubernetes `Secret` objects using `valueFrom.secretKeyRef`.
-2. **Git Protection**:
-   - Avoid committing unencrypted secret manifests to remote git repositories.
-   - Utilize tools such as **Sealed Secrets**, **SOPS (Mozilla Secrets OPerationS)** with Age keys, or **External Secrets Operator** pulling from a local HashiCorp Vault or 1Password.
-3. **Repository Workflow & Branch Protection**:
-   - Direct pushes to `main` should be restricted. Follow the [Release Protocol](.antigravity/rules.md) by creating feature branches (`feature/<name>`) and opening Pull Requests via `gh pr create`.
+> **Plaintext Secrets Notice**  
+> Direct manifest files (such as `/home/mferrin/mealie-all-in-one.yml`) contain plaintext API keys and SMTP passwords.
+> 
+> **Recommended Improvements**:
+> 1. Migrate secrets out of plain YAML into Kubernetes `Secret` resources.
+> 2. For future GitOps expansion, implement **Sealed Secrets** or **SOPS** with age encryption so credentials can be safely committed to this repository.
