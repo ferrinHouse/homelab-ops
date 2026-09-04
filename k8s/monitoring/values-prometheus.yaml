@@ -36,9 +36,16 @@ alertmanager:
 prometheus-pushgateway:
   enabled: false
 
-# Disable Prometheus Node Exporter (Alloy daemonset already collects node telemetry)
+# Enable Prometheus Node Exporter for host-level OS metrics (CPU, RAM, disk, network)
 prometheus-node-exporter:
-  enabled: false
+  enabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
 
 # Disable Kube-State-Metrics to keep initial deployment footprint minimal
 kube-state-metrics:
