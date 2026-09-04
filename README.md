@@ -15,7 +15,7 @@ Welcome to the **Ferrin Homelab** infrastructure and operations repository. This
 - [Networking & Ingress Routing](#-networking--ingress-routing)
 - [Service Catalog & Port Allocations](#-service-catalog--port-allocations)
 - [Workload Overview](#-workload-overview)
-- [Observability Stack (Loki, Alloy, Grafana)](#-observability-stack)
+- [Observability Stack (Loki, Alloy, Grafana, Prometheus)](#-observability-stack)
 - [CI/CD & GitOps Automation](#-cicd--gitops-automation)
 - [Operations & "Where Are My Files?" Runbook](#-operations--where-are-my-files-runbook)
 - [Future Architecture & Helm Migration Roadmap](#-future-architecture--helm-migration-roadmap)
@@ -31,7 +31,7 @@ graph TD
         OMV["OpenMediaVault NAS<br/><b>192.168.1.253</b><br/>(NFS Exports)"]
         
         subgraph K3sCluster ["k3s Multi-Node Cluster"]
-            NODE1["<b>kubeprime</b> (192.168.1.247)<br/>Control-Plane / Master (Pi ARM64)<br/>• GitHub Self-Hosted Runner<br/>• Loki (SingleBinary)<br/>• Mealie App<br/>• Whiskey Tracker<br/>• Obsidian Sync DB"]
+            NODE1["<b>kubeprime</b> (192.168.1.247)<br/>Control-Plane / Master (Pi ARM64)<br/>• GitHub Self-Hosted Runner<br/>• Loki (SingleBinary)<br/>• Prometheus (Metrics)<br/>• Mealie App<br/>• Whiskey Tracker<br/>• Obsidian Sync DB"]
             NODE2["<b>kube2</b> (192.168.1.248)<br/>Worker Node (Pi ARM64)<br/>• Grafana (Pod)<br/>• Nginx Proxy Manager (NPM)<br/>• Mealie Database (Postgres 15)<br/>• Cloudflare DDNS"]
             NODE3["<b>yoga-node</b> (192.168.1.249)<br/>Worker / Edge Node (x86_64)<br/>• Alloy Collector Daemon<br/>• ServiceLB Mesh"]
         end
@@ -51,6 +51,7 @@ graph TD
     OMV -->|NFS Exports| NFS_STATIC
     NFS_DYN -.->|monitoring-grafana-pvc-*| NODE2
     NFS_DYN -.->|monitoring-storage-loki-*| NODE1
+    NFS_DYN -.->|monitoring-prometheus-server-*| NODE1
     NFS_STATIC --> K3sCluster
 
     %% Routing Mesh
@@ -79,7 +80,7 @@ The cluster is a multi-architecture hybrid running **k3s v1.33.4+k3s1** with **c
 One of the most important architectural aspects of this homelab is that **workloads are managed under two different paradigms**:
 
 ### Model A: Automated GitOps & Helm (Observability & Storage)
-- **Workloads**: `grafana`, `loki`, `alloy` (namespace `monitoring`), `nfs-subdir-external-provisioner` (namespace `storage`).
+- **Workloads**: `grafana`, `loki`, `alloy`, `prometheus` (namespace `monitoring`), `nfs-subdir-external-provisioner` (namespace `storage`).
 - **Source of Truth**: This repository (`homelab-ops`) under `k8s/monitoring/` and `k8s/storage/`.
 - **How It Deploys**: A self-hosted GitHub Actions runner on `kubeprime` runs [`.github/workflows/ci.yaml`](.github/workflows/ci.yaml) on push to `main`.
 - **On-Disk Checkout on the Pi**:
@@ -117,6 +118,7 @@ The cluster runs `nfs-subdir-external-provisioner` with the default StorageClass
 | :--- | :--- | :--- |
 | **Grafana** | `monitoring/grafana` | `/export/KubernetesLogs/monitoring-grafana-pvc-ebd72568-2350-49de-8b50-c18169c3c3a2/` |
 | **Loki** | `monitoring/storage-loki-0` | `/export/KubernetesLogs/monitoring-storage-loki-0-pvc-66c40a15-8cf0-4990-ab6d-64b0b84f28c2/` |
+| **Prometheus** | `monitoring/prometheus-server` | `/export/KubernetesLogs/monitoring-prometheus-server-.../` |
 
 ### Comprehensive Storage Matrix
 
@@ -124,6 +126,7 @@ The cluster runs `nfs-subdir-external-provisioner` with the default StorageClass
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `pvc-ebd725...` | Dynamic NFS | `192.168.1.253:/export/KubernetesLogs/monitoring-grafana-...` | Grafana (`/var/lib/grafana`) | 2 Gi | RWO |
 | `pvc-66c40a...` | Dynamic NFS | `192.168.1.253:/export/KubernetesLogs/monitoring-storage-loki-...` | Loki (`/var/loki`) | 50 Gi | RWO |
+| `pvc-prometheus...` | Dynamic NFS | `192.168.1.253:/export/KubernetesLogs/monitoring-prometheus-server-...` | Prometheus Server (`/data`) | 20 Gi | RWO |
 | `nfs-npm-pv` | Static NFS | `192.168.1.253:/export/npm-data` | NPM (`/data`, `/etc/letsencrypt`) | 5 Gi | RWX |
 | `nfs-mealie-app-pv` | Static NFS | `192.168.1.253:/export/mealie-data/app` | Mealie App (`/app/data`) | 15 Gi | RWX |
 | `nfs-mealie-db-pv` | Static NFS | `192.168.1.253:/export/mealie-data/db` | Mealie Postgres (`/var/lib/postgresql/data`) | 10 Gi | RWX |
@@ -159,6 +162,7 @@ In Kubernetes, **a `NodePort` is accessible on every node's IP address**, regard
 | **NPM Admin UI** | `default` | `kube2` | `NodePort` | `81` | `81` | `http://<node-ip>:81` |
 | **Plex Media Web** | `default` | `kube2` | `LoadBalancer` | `32400` | `32400` | `http://<node-ip>:32400` |
 | **Loki Gateway** | `monitoring` | `kubeprime` | `ClusterIP` | `80` | None (Internal) | `http://loki-gateway.monitoring.svc.cluster.local` |
+| **Prometheus Server** | `monitoring` | `kubeprime` | `ClusterIP` | `80` | None (Internal) | `http://prometheus-server.monitoring.svc.cluster.local` |
 | **Kubernetes API** | `kube-system` | `kubeprime` | Native API | `6443` | `6443` | `https://kubeprime:6443` |
 
 ---
@@ -166,8 +170,9 @@ In Kubernetes, **a `NodePort` is accessible on every node's IP address**, regard
 ## 📦 Workload Overview
 
 ### 1. Observability Stack (`monitoring` namespace)
-- **Grafana**: Visualizations and dashboards, pinned to NodePort `30001`, dynamically backed by 2 Gi on OMV. Pre-wired with the internal Loki datasource.
+- **Grafana**: Visualizations and dashboards, pinned to NodePort `30001`, dynamically backed by 2 Gi on OMV. Pre-wired with internal Loki and Prometheus datasources.
 - **Loki**: Deployed in `SingleBinary` mode, TSDB v13 schema, with distributed memory caches disabled to fit comfortably within Pi RAM.
+- **Prometheus**: Lightweight metrics storage deployed via Helm (`prometheus-community/prometheus`) with 20 Gi dynamic NFS storage on OMV (15-day retention) and resource limits optimized for Raspberry Pi. Auxiliary components (Alertmanager, Pushgateway) are disabled to preserve RAM, adding metrics storage without altering existing Loki or Alloy pods.
 - **Grafana Alloy**: Deployed as a `DaemonSet` running on all nodes (`kubeprime`, `kube2`, `yoga-node`). It tails all pod logs and extracts structured JSON fields (`Level`, `Message`, `WhiskeyName`, `Query`) for the Whiskey Tracker app before shipping to Loki.
 
 ### 2. Application Services (`default` namespace)
@@ -186,7 +191,7 @@ Automated deployments are managed by GitHub Actions using a self-hosted runner o
 - **Runner Directory**: `/home/mferrin/actions-runner/`
 - **Workflow**: [`.github/workflows/ci.yaml`](.github/workflows/ci.yaml)
 - **Cluster Target**: Configured via `KUBECONFIG: /etc/rancher/k3s/k3s.yaml`.
-- **Automated Deployments**: Upgrades Helm charts for `nfs-provisioner`, `loki`, `grafana`, and `alloy` upon any push to `main` touching `k8s/monitoring/**` or `k8s/storage/**`.
+- **Automated Deployments**: Upgrades Helm charts for `nfs-provisioner`, `loki`, `prometheus`, `grafana`, and `alloy` upon any push to `main` touching `k8s/monitoring/**` or `k8s/storage/**`.
 
 ---
 
@@ -215,6 +220,15 @@ Inside you will find `grafana.db`.
 #### 3. How do I inspect the active Helm values for a release?
 ```bash
 sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm get values grafana -n monitoring
+```
+
+#### 4. How do I manually deploy or upgrade Prometheus on kubeprime?
+```bash
+sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm repo update
+sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade --install prometheus prometheus-community/prometheus \
+  --namespace monitoring --create-namespace \
+  -f k8s/monitoring/values-prometheus.yaml
 ```
 
 ### Routine Cluster Administration Commands

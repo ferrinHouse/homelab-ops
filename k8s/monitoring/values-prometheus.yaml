@@ -1,0 +1,45 @@
+---
+# Prometheus tuning for Raspberry Pi (ARM64) and hybrid homelab
+# Optimizing for lightweight metrics storage without unnecessary auxiliary pods
+
+# Core Prometheus Server configuration
+server:
+  # Metric retention period to prevent unbounded storage growth on NAS
+  retention: "15d"
+
+  # Persistent storage on OpenMediaVault NAS using dynamic NFS provisioner
+  persistentVolume:
+    enabled: true
+    storageClass: "nfs-client"
+    accessModes:
+      - ReadWriteOnce
+    size: 20Gi
+
+  # Resource allocation tuned for Raspberry Pi (matching Loki profile)
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1024Mi
+
+  # Internal ClusterIP service exposing Prometheus on standard HTTP port 80
+  service:
+    servicePort: 80
+
+# Disable Alertmanager to conserve memory (enable if routing alerts via email/webhook)
+alertmanager:
+  enabled: false
+
+# Disable Pushgateway (batch jobs / ephemeral metrics not needed)
+prometheus-pushgateway:
+  enabled: false
+
+# Disable Prometheus Node Exporter (Alloy daemonset already collects node telemetry)
+prometheus-node-exporter:
+  enabled: false
+
+# Disable Kube-State-Metrics to keep initial deployment footprint minimal
+kube-state-metrics:
+  enabled: false
