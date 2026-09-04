@@ -19,6 +19,12 @@ datasources:
         access: proxy
         isDefault: false
 
+# Enable iframe embedding and anonymous Viewer access (e.g. for Home Assistant / local dashboards)
+env:
+  GF_SECURITY_ALLOW_EMBEDDING: "true"
+  GF_AUTH_ANONYMOUS_ENABLED: "true"
+  GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+
 # Grafana optimization for Pi
 resources:
   requests:
