@@ -172,7 +172,7 @@ In Kubernetes, **a `NodePort` is accessible on every node's IP address**, regard
 ### 1. Observability Stack (`monitoring` namespace)
 - **Grafana**: Visualizations and dashboards, pinned to NodePort `30001`, dynamically backed by 2 Gi on OMV. Pre-wired with internal Loki and Prometheus datasources.
 - **Loki**: Deployed in `SingleBinary` mode, TSDB v13 schema, with distributed memory caches disabled to fit comfortably within Pi RAM.
-- **Prometheus**: Lightweight metrics storage deployed via Helm (`prometheus-community/prometheus`) with 20 Gi dynamic NFS storage on OMV (15-day retention) and resource limits optimized for Raspberry Pi. Auxiliary components (Alertmanager, Pushgateway) are disabled to preserve RAM, adding metrics storage without altering existing Loki or Alloy pods.
+- **Prometheus**: Metrics storage deployed via Helm (`prometheus-community/prometheus`) with 20 Gi dynamic NFS storage on OMV (15-day retention), Node Exporter daemonset for host-level hardware and OS telemetry (`node_*`), and resource limits optimized for Raspberry Pi. Heavy auxiliary components (Alertmanager, Pushgateway) are disabled to preserve RAM.
 - **Grafana Alloy**: Deployed as a `DaemonSet` running on all nodes (`kubeprime`, `kube2`, `yoga-node`). It tails all pod logs and extracts structured JSON fields (`Level`, `Message`, `WhiskeyName`, `Query`) for the Whiskey Tracker app before shipping to Loki.
 
 ### 2. Application Services (`default` namespace)
