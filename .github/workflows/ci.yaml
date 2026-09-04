@@ -23,6 +23,7 @@ jobs:
         run: |
           helm repo add grafana https://grafana.github.io/helm-charts
           helm repo add nfs-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
           helm repo update
 
       - name: Deploy NFS Provisioner
@@ -36,6 +37,12 @@ jobs:
           helm upgrade --install loki grafana/loki \
             --namespace monitoring --create-namespace \
             -f k8s/monitoring/values-loki.yaml
+
+      - name: Deploy Prometheus
+        run: |
+          helm upgrade --install prometheus prometheus-community/prometheus \
+            --namespace monitoring --create-namespace \
+            -f k8s/monitoring/values-prometheus.yaml
 
       - name: Deploy Grafana
         run: |

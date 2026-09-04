@@ -12,6 +12,12 @@ datasources:
         jsonData:
           # Limit max lines to conserve browser memory and network bandwidth
           maxLines: 1000
+      - name: Prometheus
+        type: prometheus
+        # Matches the Prometheus release name and namespace "monitoring"
+        url: http://prometheus-server.monitoring.svc.cluster.local
+        access: proxy
+        isDefault: false
 
 # Grafana optimization for Pi
 resources:
