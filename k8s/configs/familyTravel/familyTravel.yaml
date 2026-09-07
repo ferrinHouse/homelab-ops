@@ -1,5 +1,5 @@
 ---
-# 1. The Persistent Volume (The physical folder on the Pi)
+# 1. The Persistent Volume (NFS on TrueNAS / OMV)
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -9,13 +9,14 @@ spec:
   capacity:
     storage: 1Gi
   accessModes:
-    - ReadOnlyMany
-  hostPath:
-    path: /home/mferrin/familyTravel/www
-    type: Directory
+    - ReadWriteMany
+  nfs:
+    server: 192.168.1.253
+    path: /export/travel-db
+  persistentVolumeReclaimPolicy: Retain
 
 ---
-# 2. The Persistent Volume Claim (The claim ticket for the folder)
+# 2. The Persistent Volume Claim
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -23,17 +24,18 @@ metadata:
 spec:
   storageClassName: manual
   accessModes:
-    - ReadOnlyMany
+    - ReadWriteMany
   resources:
     requests:
       storage: 1Gi
 
 ---
-# 3. The Deployment (The Nginx web server)
+# 3. The Deployment (Next.js Travel Site)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: travel-site-deployment
+  namespace: default
 spec:
   replicas: 1
   selector:
@@ -44,32 +46,48 @@ spec:
       labels:
         app: travel-site
     spec:
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      imagePullSecrets:
+        - name: ghcr-secret
       containers:
-        - name: nginx
-          image: nginx:alpine
+        - name: nextjs
+          image: ghcr.io/ferrinhouse/travel-site:latest
+          imagePullPolicy: Always
           resources:
             requests:
               cpu: "10m"
               memory: "64Mi"
             limits:
               cpu: "100m"
-              memory: "128Mi"
+              memory: "256Mi"
           ports:
-            - containerPort: 80
+            - containerPort: 3000
+          env:
+            - name: DATABASE_URL
+              value: "file:/app/database/travel.db"
+            - name: PORT
+              value: "3000"
+            - name: ADMIN_PASSCODE
+              valueFrom:
+                secretKeyRef:
+                  name: travel-secrets
+                  key: ADMIN_PASSCODE
           volumeMounts:
-            - name: html-volume
-              mountPath: /usr/share/nginx/html
+            - name: database-volume
+              mountPath: /app/database
       volumes:
-        - name: html-volume
+        - name: database-volume
           persistentVolumeClaim:
             claimName: travel-site-pvc
 
 ---
-# 4. The Service (The networking rule to access the site)
+# 4. The Service
 apiVersion: v1
 kind: Service
 metadata:
   name: travel-site-service
+  namespace: default
 spec:
   type: NodePort
   selector:
@@ -77,5 +95,5 @@ spec:
   ports:
     - protocol: TCP
       port: 80
-      targetPort: 80
+      targetPort: 3000
       nodePort: 30090
