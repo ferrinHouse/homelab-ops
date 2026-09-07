@@ -1,0 +1,193 @@
+# --- 1. Persistent Volume for Mealie App Data ---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: nfs-mealie-app-pv
+spec:
+  capacity:
+    storage: 15Gi
+  accessModes:
+    - ReadWriteMany
+  nfs:
+    server: 192.168.1.253 # 👈 Replace with your NAS IP address
+    path: "/export/mealie-data/app"
+    readOnly: false
+---
+# --- 2. Persistent Volume Claim for Mealie App Data ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mealie-app-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 15Gi
+  storageClassName: ""
+---
+# --- 3. Persistent Volume for Mealie Database ---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: nfs-mealie-db-pv
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteMany
+  nfs:
+    server: 192.168.1.253 # 👈 Replace with your NAS IP address
+    path: "/export/mealie-data/db"
+    readOnly: false
+---
+# --- 4. Persistent Volume Claim for Mealie Database ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mealie-db-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: ""
+---
+# --- 5. Deployment for the PostgreSQL Database ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mealiedb-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mealiedb
+  template:
+    metadata:
+      labels:
+        app: mealiedb
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15
+          env:
+            - name: POSTGRES_USER
+              value: "mealie"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mealie-db-secret
+                  key: postgres-password
+            - name: POSTGRES_DB
+              value: "mealiedb"
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: mealie-db-pvc
+---
+# --- 6. Service for the PostgreSQL Database ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mealiedb-service
+spec:
+  selector:
+    app: mealiedb
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+---
+# --- 7. Deployment for the Mealie Application ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mealie-app-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mealie
+  template:
+    metadata:
+      labels:
+        app: mealie
+    spec:
+      containers:
+        - name: mealie
+          image: ghcr.io/mealie-recipes/mealie:latest
+          env:
+            - name: TZ
+              value: "America/Chicago"
+            - name: ALLOW_SIGNUP
+              value: "true"
+            - name: DB_ENGINE
+              value: "postgres"
+            - name: DB_TYPE
+              value: "postgres"
+            - name: POSTGRES_SERVER
+              value: "mealiedb-service"
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              value: "mealie"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mealie-db-secret
+                  key: postgres-password
+            - name: POSTGRES_DB
+              value: "mealiedb"
+            - name: PUID
+              value: "1002"
+            - name: PGID
+              value: "1002"
+            - name: SMTP_HOST 
+              value: "smtp.gmail.com"
+            - name: SMTP_PORT 
+              value: "587"
+            - name: SMTP_USER 
+              value: "mike.ferrin.84+ferrinmealplanner@gmail.com"
+            - name: SMTP_PASSWORD 
+              value: "mjag ysyi wknd vymb"
+            - name: SMTP_FROM_EMAIL 
+              value: "mike.ferrin.84+ferrinmealplanner@gmail.com"
+            - name: SMTP_TLS 
+              value: "true"
+            - name: OPENAI_BASE_URL 
+              value: "https://generativelanguage.googleapis.com/v1beta"
+            - name: OPENAI_MODEL 
+              value: "gemini-2.0-flash"
+            - name: OPENAI_API_KEY 
+              value: "AIzaSyCiAviSv4WAR7yALPh3Gnt86Wqcbj5MUYo"
+          ports:
+            - containerPort: 9000
+          volumeMounts:
+            - name: mealie-storage
+              mountPath: /app/data
+      volumes:
+        - name: mealie-storage
+          persistentVolumeClaim:
+            claimName: mealie-app-pvc
+---
+# --- 8. Service for the Mealie Application ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mealie-app-service
+spec:
+  selector:
+    app: mealie
+  type: NodePort
+  ports:
+    - protocol: TCP
+      port: 9000
+      targetPort: 9000
+      nodePort: 30925

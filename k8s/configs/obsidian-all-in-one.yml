@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: obsidian-sync-db
+  namespace: default
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: obsidian-couchdb
+  template:
+    metadata:
+      labels:
+        app: obsidian-couchdb
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: kubeprime
+      initContainers:
+      - name: init-config
+        image: busybox:latest
+        command:
+        - sh
+        - -c
+        - cp /config/local.ini /local.d/local.ini && chown -R 5984:5984 /local.d
+        volumeMounts:
+        - name: config-source
+          mountPath: /config
+        - name: local-d-volume
+          mountPath: /local.d
+      containers:
+      - name: couchdb
+        image: couchdb:3.3.3
+        env:
+        - name: COUCHDB_USER
+          value: "admin"
+        - name: COUCHDB_PASSWORD
+          value: "fnb$C1296"
+        ports:
+        - containerPort: 5984
+        volumeMounts:
+        - name: nfs-storage
+          mountPath: /opt/couchdb/data
+        - name: local-d-volume
+          mountPath: /opt/couchdb/etc/local.d
+      volumes:
+      - name: nfs-storage
+        nfs:
+          server: 192.168.1.253
+          path: /export/obsidian_data
+      - name: config-source
+        configMap:
+          name: obsidian-couchdb-config
+      - name: local-d-volume
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: obsidian-couchdb-service
+  namespace: default
+spec:
+  selector:
+    app: obsidian-couchdb
+  ports:
+    - protocol: TCP
+      port: 5984
+      targetPort: 5984
+      nodePort: 30584
+  type: NodePort
