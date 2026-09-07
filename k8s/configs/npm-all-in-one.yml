@@ -1,0 +1,101 @@
+# --- 1. Persistent Volume for NPM ---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: nfs-npm-pv
+spec:
+  capacity:
+    storage: 5Gi # NPM config is small
+  accessModes:
+    - ReadWriteMany
+  nfs:
+    server: "192.168.1.253" # Your OMV IP
+    path: "/export/npm-data" # The share containing your existing data
+    readOnly: false
+---
+# --- 2. Persistent Volume Claim for NPM ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: npm-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: ""
+---
+# --- 3. Deployment for Nginx Proxy Manager ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: npm-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: npm
+  template:
+    metadata:
+      labels:
+        app: npm
+    spec:
+      containers:
+        - name: npm
+          image: 'jc21/nginx-proxy-manager:latest'
+          env:
+            - name: PUID
+              value: "1001" # Correct, from your compose file
+            - name: PGID
+              value: "1001" # Correct, from your compose file
+          ports:
+            - containerPort: 80
+              name: http
+            - containerPort: 443
+              name: https
+            - containerPort: 81
+              name: admin-ui
+          volumeMounts:
+            - name: npm-storage
+              mountPath: /data
+              subPath: data # Mounts the 'data' subfolder from the share
+            - name: npm-storage 
+              mountPath: /etc/letsencrypt
+              subPath: letsencrypt # Mounts the 'letsencrypt' subfolder from the same share
+      dnsPolicy: "None"
+      dnsConfig:
+        nameservers:
+          - 10.43.0.10
+          - 8.8.8.8
+        searches:
+          - default.svc.cluster.local
+          - svc.cluster.local
+          - cluster.local
+      volumes:
+        - name: npm-storage
+          persistentVolumeClaim:
+            claimName: npm-pvc
+---
+# --- 4. Service for Nginx Proxy Manager ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: npm-service
+spec:
+  selector:
+    app: npm
+  type: NodePort
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 80
+    - name: https
+      protocol: TCP
+      port: 443
+      targetPort: 443
+    - name: admin-ui
+      protocol: TCP
+      port: 81
+      targetPort: 81
