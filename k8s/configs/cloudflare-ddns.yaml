@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflare-ddns
+  namespace: default
+  labels:
+    app: cloudflare-ddns
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudflare-ddns
+  template:
+    metadata:
+      labels:
+        app: cloudflare-ddns
+    spec:
+      containers:
+      - name: ddns
+        image: favonia/cloudflare-ddns:latest
+        imagePullPolicy: Always
+        env:
+        - name: CF_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: cloudflare-secrets
+              key: api-token
+        # Domain names to update
+        - name: DOMAINS
+          value: "ferrinhouse.org,whiskey-trek.com,evolvingpour.com"
+        # Set to false to ensure Let's Encrypt can see your IP directly
+        - name: PROXIED
+          value: "false"
+        # Disable IPv6 detection because network is IPv4 only
+        - name: IP6_PROVIDER
+          value: "none"
