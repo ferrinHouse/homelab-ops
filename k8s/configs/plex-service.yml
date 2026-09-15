@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: plex-service
+spec:
+  selector:
+    app: plex # This links the Service to the Deployment above
+  type: LoadBalancer
+  ports:
+    - name: web
+      protocol: TCP
+      port: 32400
+      targetPort: 32400
+    - name: dlna-tcp
+      protocol: TCP
+      port: 32469
+      targetPort: 32469
+    - name: dlna-udp
+      protocol: UDP
+      port: 1900
+      targetPort: 1900
+    # You can add other ports here if you find they are needed

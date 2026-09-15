@@ -1,0 +1,99 @@
+---
+# 1. The Persistent Volume (NFS on TrueNAS / OMV)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: travel-site-pv
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteMany
+  nfs:
+    server: 192.168.1.253
+    path: /export/travel-db
+  persistentVolumeReclaimPolicy: Retain
+
+---
+# 2. The Persistent Volume Claim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: travel-site-pvc
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+# 3. The Deployment (Next.js Travel Site)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: travel-site-deployment
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: travel-site
+  template:
+    metadata:
+      labels:
+        app: travel-site
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: nextjs
+          image: ghcr.io/ferrinhouse/travel-site:latest
+          imagePullPolicy: Always
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "64Mi"
+            limits:
+              cpu: "100m"
+              memory: "256Mi"
+          ports:
+            - containerPort: 3000
+          env:
+            - name: DATABASE_URL
+              value: "file:/app/database/travel.db"
+            - name: PORT
+              value: "3000"
+            - name: ADMIN_PASSCODE
+              valueFrom:
+                secretKeyRef:
+                  name: travel-secrets
+                  key: ADMIN_PASSCODE
+          volumeMounts:
+            - name: database-volume
+              mountPath: /app/database
+      volumes:
+        - name: database-volume
+          persistentVolumeClaim:
+            claimName: travel-site-pvc
+
+---
+# 4. The Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: travel-site-service
+  namespace: default
+spec:
+  type: NodePort
+  selector:
+    app: travel-site
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+      nodePort: 30090
