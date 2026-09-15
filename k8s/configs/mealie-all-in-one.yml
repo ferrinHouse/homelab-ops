@@ -126,6 +126,8 @@ spec:
           env:
             - name: TZ
               value: "America/Chicago"
+            - name: BASE_URL
+              value: "https://meals.ferrinhouse.org"
             - name: ALLOW_SIGNUP
               value: "true"
             - name: DB_ENGINE
