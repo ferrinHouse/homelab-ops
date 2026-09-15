@@ -172,7 +172,7 @@ In Kubernetes, **a `NodePort` is accessible on every node's IP address**, regard
 ### 1. Observability Stack (`monitoring` namespace)
 - **Grafana**: Visualizations and dashboards, pinned to NodePort `30001`, dynamically backed by 2 Gi on OMV. Pre-wired with internal Loki and Prometheus datasources.
 - **Loki**: Deployed in `SingleBinary` mode, TSDB v13 schema, with distributed memory caches disabled to fit comfortably within Pi RAM.
-- **Prometheus**: Lightweight metrics storage deployed via Helm (`prometheus-community/prometheus`) with 20 Gi dynamic NFS storage on OMV (15-day retention) and resource limits optimized for Raspberry Pi. Auxiliary components (Alertmanager, Pushgateway) are disabled to preserve RAM, adding metrics storage without altering existing Loki or Alloy pods.
+- **Prometheus**: Metrics storage deployed via Helm (`prometheus-community/prometheus`) with 20 Gi dynamic NFS storage on OMV (15-day retention), Node Exporter daemonset for host-level hardware and OS telemetry (`node_*`), and resource limits optimized for Raspberry Pi. Heavy auxiliary components (Alertmanager, Pushgateway) are disabled to preserve RAM.
 - **Grafana Alloy**: Deployed as a `DaemonSet` running on all nodes (`kubeprime`, `kube2`, `yoga-node`). It tails all pod logs and extracts structured JSON fields (`Level`, `Message`, `WhiskeyName`, `Query`) for the Whiskey Tracker app before shipping to Loki.
 
 ### 2. Application Services (`default` namespace)
@@ -299,10 +299,20 @@ graph LR
 
 ## 🔐 Security & Secrets Management
 
-> [!WARNING]
-> **Plaintext Secrets Notice**  
-> Direct manifest files (such as `/home/mferrin/mealie-all-in-one.yml`) contain plaintext API keys and SMTP passwords.
-> 
-> **Recommended Improvements**:
-> 1. Migrate secrets out of plain YAML into Kubernetes `Secret` resources.
-> 2. For future GitOps expansion, implement **Sealed Secrets** or **SOPS** with age encryption so credentials can be safely committed to this repository.
+Application secrets (Mealie SMTP password, Mealie OpenAI/Gemini API key, Mealie Postgres password,
+Obsidian CouchDB password, Cloudflare API token, Travel admin passcode, the GHCR pull secret) are
+**never committed to this repository**. Manifests reference them via `secretKeyRef` only.
+
+The values themselves live as encrypted [GitHub Actions repository secrets](https://github.com/ferrinHouse/homelab-ops/settings/secrets/actions).
+On every push to `main` touching `k8s/**`, the self-hosted runner workflow
+([`.github/workflows/ci.yaml`](.github/workflows/ci.yaml)) creates/updates the corresponding
+Kubernetes `Secret` objects from those GitHub secrets (`kubectl create secret ... --dry-run=client -o yaml | kubectl apply -f -`)
+and restarts the affected deployments so rotated values take effect immediately.
+
+**To rotate a credential**: update the value in GitHub Actions repo secrets (Settings → Secrets and
+variables → Actions), then push any change to `main` (or run the workflow manually via
+`workflow_dispatch`) to roll it out.
+
+`cloudflare-secrets`, `travel-secrets`, and `ghcr-secret` currently still need to be created
+out-of-band on the cluster (`kubectl create secret ...`) since CI doesn't manage them yet — folding
+them into the same CI-managed pattern above is a good follow-up.

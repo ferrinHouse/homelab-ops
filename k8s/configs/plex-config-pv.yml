@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: nfs-plex-config-pv # A unique name for this PV
+spec:
+  capacity:
+    storage: 20Gi # This size is not enforced, just used for matching
+  accessModes:
+    - ReadWriteMany # NFS supports many clients reading/writing
+  nfs:
+    server: 192.168.1.253
+    path: "/export/plex-config" # The EXACT path on your OMV server
+    readOnly: false
