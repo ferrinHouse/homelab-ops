@@ -164,15 +164,6 @@ spec:
               value: "mike.ferrin.84+ferrinmealplanner@gmail.com"
             - name: SMTP_TLS
               value: "true"
-            - name: OPENAI_BASE_URL
-              value: "https://generativelanguage.googleapis.com/v1beta"
-            - name: OPENAI_MODEL
-              value: "gemini-2.0-flash"
-            - name: OPENAI_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: mealie-app-secrets
-                  key: openai-api-key
           ports:
             - containerPort: 9000
           volumeMounts:

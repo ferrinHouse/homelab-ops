@@ -299,9 +299,15 @@ graph LR
 
 ## 🔐 Security & Secrets Management
 
-Application secrets (Mealie SMTP password, Mealie OpenAI/Gemini API key, Mealie Postgres password,
-Obsidian CouchDB password, Cloudflare API token, Travel admin passcode, the GHCR pull secret) are
-**never committed to this repository**. Manifests reference them via `secretKeyRef` only.
+Application secrets (Mealie SMTP password, Mealie Postgres password, Obsidian CouchDB password,
+Cloudflare API token, Travel admin passcode, the GHCR pull secret) are **never committed to this
+repository**. Manifests reference them via `secretKeyRef` only.
+
+> [!NOTE]
+> Mealie's AI recipe scraping (Gemini) is configured entirely through the Admin UI (Settings → AI
+> Providers) and stored in Mealie's own Postgres database — it does **not** read `OPENAI_API_KEY`/
+> `OPENAI_MODEL`/`OPENAI_BASE_URL` env vars in current versions, so those were removed from the
+> manifest. Rotate that key through the Mealie Admin UI, not GitHub secrets.
 
 The values themselves live as encrypted [GitHub Actions repository secrets](https://github.com/ferrinHouse/homelab-ops/settings/secrets/actions).
 On every push to `main` touching `k8s/**`, the self-hosted runner workflow
