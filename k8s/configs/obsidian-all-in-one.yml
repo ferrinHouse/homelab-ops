@@ -36,7 +36,10 @@ spec:
         - name: COUCHDB_USER
           value: "admin"
         - name: COUCHDB_PASSWORD
-          value: "***REMOVED-COUCHDB-PASSWORD***"
+          valueFrom:
+            secretKeyRef:
+              name: obsidian-secrets
+              key: couchdb-password
         ports:
         - containerPort: 5984
         volumeMounts:

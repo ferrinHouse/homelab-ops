@@ -155,18 +155,24 @@ spec:
               value: "587"
             - name: SMTP_USER 
               value: "mike.ferrin.84+ferrinmealplanner@gmail.com"
-            - name: SMTP_PASSWORD 
-              value: "***REMOVED-SMTP-APP-PASSWORD***"
-            - name: SMTP_FROM_EMAIL 
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mealie-app-secrets
+                  key: smtp-password
+            - name: SMTP_FROM_EMAIL
               value: "mike.ferrin.84+ferrinmealplanner@gmail.com"
-            - name: SMTP_TLS 
+            - name: SMTP_TLS
               value: "true"
-            - name: OPENAI_BASE_URL 
+            - name: OPENAI_BASE_URL
               value: "https://generativelanguage.googleapis.com/v1beta"
-            - name: OPENAI_MODEL 
+            - name: OPENAI_MODEL
               value: "gemini-2.0-flash"
-            - name: OPENAI_API_KEY 
-              value: "***REMOVED-GEMINI-API-KEY***"
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mealie-app-secrets
+                  key: openai-api-key
           ports:
             - containerPort: 9000
           volumeMounts:
