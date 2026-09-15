@@ -7,6 +7,7 @@ on:
     paths:
       - 'k8s/monitoring/**'
       - 'k8s/storage/**'
+      - 'k8s/configs/**'
       - '.github/workflows/ci.yaml'
   workflow_dispatch:
 
@@ -55,3 +56,41 @@ jobs:
           helm upgrade --install alloy grafana/alloy \
             --namespace monitoring --create-namespace \
             --set-file alloy.configMap.content=k8s/monitoring/config.alloy
+
+      - name: Create/Update Application Secrets
+        run: |
+          kubectl create secret generic mealie-db-secret \
+            --namespace default \
+            --from-literal=postgres-password="${{ secrets.MEALIE_DB_PASSWORD }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl create secret generic mealie-app-secrets \
+            --namespace default \
+            --from-literal=smtp-password="${{ secrets.MEALIE_SMTP_PASSWORD }}" \
+            --from-literal=openai-api-key="${{ secrets.MEALIE_OPENAI_API_KEY }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl create secret generic obsidian-secrets \
+            --namespace default \
+            --from-literal=couchdb-password="${{ secrets.OBSIDIAN_COUCHDB_PASSWORD }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy Application Workloads
+        run: |
+          kubectl apply -n default -f k8s/configs/mealie-all-in-one.yml
+          kubectl apply -n default -f k8s/configs/obsidian-all-in-one.yml
+          kubectl apply -n default -f k8s/configs/npm-all-in-one.yml
+          kubectl apply -n default -f k8s/configs/plex-config-pv.yml
+          kubectl apply -n default -f k8s/configs/plex-config-pvc.yml
+          kubectl apply -n default -f k8s/configs/plex-media-pv.yml
+          kubectl apply -n default -f k8s/configs/plex-media-pvc.yml
+          kubectl apply -n default -f k8s/configs/plex-deployment.yml
+          kubectl apply -n default -f k8s/configs/plex-service.yml
+          kubectl apply -f k8s/configs/cloudflare-ddns.yaml
+          kubectl apply -f k8s/configs/familyTravel/familyTravel.yaml
+
+      - name: Roll Out Secret Changes
+        run: |
+          kubectl rollout restart deployment/mealiedb-deployment -n default
+          kubectl rollout restart deployment/mealie-app-deployment -n default
+          kubectl rollout restart deployment/obsidian-sync-db -n default

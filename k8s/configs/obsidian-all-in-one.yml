@@ -36,7 +36,10 @@ spec:
         - name: COUCHDB_USER
           value: "admin"
         - name: COUCHDB_PASSWORD
-          value: "fnb$C1296"
+          valueFrom:
+            secretKeyRef:
+              name: obsidian-secrets
+              key: couchdb-password
         ports:
         - containerPort: 5984
         volumeMounts:
