@@ -30,35 +30,85 @@ discovery.relabel "pods" {
 // Scrape container logs using the discovered and relabeled targets
 loki.source.kubernetes "pods" {
   targets    = discovery.relabel.pods.output
-  forward_to = [loki.process.json_logs.receiver]
+  forward_to = [loki.process.pods.receiver]
 }
 
-// Process the structured JSON logs from the .NET 10 "Whiskey Tracker" app
-loki.process "json_logs" {
+loki.process "pods" {
   forward_to = [loki.write.local.receiver]
 
-  // Parse outer JSON fields from the .NET log payload
-  stage.json {
-    expressions = {
-      level       = "Level",
-      message     = "Message",
-      whiskeyName = "WhiskeyName",
-      query       = "Query",
+  // --- Tier 1: logfmt (go-kit style) monitoring-stack components ---------
+  // grafana, loki, prometheus-server, alloy all log key=value logfmt.
+  // loki-canary (plain text) and loki-gateway (nginx access logs) are
+  // deliberately excluded and fall through to the untouched passthrough tier.
+  stage.match {
+    selector = "{namespace=\"monitoring\", container=~\"grafana|loki|prometheus-server|alloy\"}"
+
+    stage.logfmt {
+      mapping = {
+        level = "",
+      }
+    }
+
+    // Normalize casing: prometheus-server logs "level=INFO" (uppercase),
+    // grafana/loki/alloy log "level=info" (lowercase). Without this, a
+    // dashboard query for level="error" would silently miss Prometheus.
+    stage.template {
+      source   = "level"
+      template = "{{ ToLower .Value }}"
+    }
+
+    // Only level is low-cardinality enough to index. Never promote msg/
+    // logger/caller/query-text fields to labels.
+    stage.labels {
+      values = {
+        level = "",
+      }
     }
   }
 
-  // Label the extracted fields so they become indexed and searchable in Loki
-  stage.labels {
-    values = {
-      level       = "level",
-      whiskeyName = "whiskeyName",
+  // --- Tier 2: Whiskey Tracker (.NET 10, container "whiskey-web") --------
+  // Standard ASP.NET Core structured JSON logging. LogLevel values are
+  // Trace/Debug/Information/Warning/Error/Critical/None (.NET's own
+  // vocabulary) — a different label alphabet than Tier 1's info/warn/error,
+  // which is fine since it's a separate stream/container.
+  stage.match {
+    selector = "{namespace=\"default\", container=\"whiskey-web\"}"
+
+    stage.json {
+      expressions = {
+        level   = "LogLevel",
+        message = "Message",
+        query   = "commandText",
+      }
     }
+
+    stage.labels {
+      values = {
+        level = "",
+      }
+    }
+
+    // commandText (EF Core's logged SQL) is unbounded free text - structured
+    // metadata keeps it queryable without creating a new stream per query.
+    stage.structured_metadata {
+      values = {
+        query = "",
+      }
+    }
+
+    // Deliberately no stage.output here: the full original JSON line
+    // (Timestamp/EventId/Category/Scopes/State included) stays in Loki
+    // rather than being collapsed down to just the Message field.
   }
 
-  // Optionally set the output to the extracted message rather than the full JSON
-  stage.output {
-    source = "message"
-  }
+  // --- Tier 3: everything else - third-party / plain-text apps -----------
+  // postgres, mealie, npm, plex, couchdb, cloudflare-ddns, travel-site,
+  // loki-gateway (nginx), loki-canary, all sidecars, kube-system addons
+  // (traefik, metrics-server, coredns), and any future pod not matched
+  // above. Intentionally NO stage.match block: per Alloy's stage.match
+  // semantics, a non-matching line falls through this pipeline unmodified -
+  // existing namespace/pod/container labels still apply, message body and
+  // format are untouched. Nothing to configure, nothing silently dropped.
 }
 
 // Forward pipeline output to the local Loki gateway
