@@ -828,12 +828,131 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource_loki}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "noValue": "0",
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${datasource_loki}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (pod) (count_over_time({namespace=~\"$namespace\", pod=~\"^.+\"} !~ `(?i)level=(info|debug)` !~ `(GET|POST) /loki/api/` !~ `(\\]|\")\\s+[23]\\d\\d\\s+` !~ `failed to try resolving symlinks` !~ `(?i)context canceled` !~ `error notifying scheduler about finished query` !~ `(?i)tail max duration limit` !~ `(?i)failed to authenticate request` !~ `panel_title=\"Live Cluster Error Feed` !~ `open_result error \\{not_found,no_db_file\\}` !~ `\"[A-Za-z0-9_]*_(error|warning)\":\\s*\"#[0-9A-Fa-f]+\"` |~ `(?i)(error|exception|fail|fatal)` [5m]))",
+          "legendFormat": "{{pod}}",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "description": "Rolling 5m error count per pod over time - shows whether errors are a one-time blip or a sustained trend.",
+      "title": "Error Trends: Log Failures per Pod (5m rolling)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prom}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "noValue": "0 B",
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prom}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=~\"$namespace\", container!=\"\", container!=\"POD\"})",
+          "legendFormat": "{{pod}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Saturation Trends: RAM Usage per Pod",
+      "type": "timeseries"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 24
+        "y": 32
       },
       "id": 103,
       "title": "\ud83d\udd25 LIVE INCIDENT & ERROR FEED (LOKI + ALLOY)",
@@ -849,7 +968,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 25
+        "y": 33
       },
       "id": 12,
       "options": {

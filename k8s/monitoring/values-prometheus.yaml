@@ -47,6 +47,14 @@ prometheus-node-exporter:
       cpu: 100m
       memory: 64Mi
 
-# Disable Kube-State-Metrics to keep initial deployment footprint minimal
+# Enable Kube-State-Metrics for pod restart/crash-loop and readiness visibility
+# on the golden-signals dashboard (lightweight, single pod, no persistence)
 kube-state-metrics:
-  enabled: false
+  enabled: true
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
