@@ -52,9 +52,29 @@ loki.process "pods" {
     // Normalize casing: prometheus-server logs "level=INFO" (uppercase),
     // grafana/loki/alloy log "level=info" (lowercase). Without this, a
     // dashboard query for level="error" would silently miss Prometheus.
-    stage.template {
-      source   = "level"
-      template = "{{ ToLower .Value }}"
+    // (Note: this Helm chart runs configMap.content through `tpl`, so any
+    // Go-template delimiters meant for Alloy's own stage.template get
+    // swallowed by Helm's templating first - use stage.replace instead,
+    // and avoid template delimiters anywhere in this file, even in comments.)
+    stage.replace {
+      expression = "^INFO$"
+      source     = "level"
+      replace    = "info"
+    }
+    stage.replace {
+      expression = "^WARN$"
+      source     = "level"
+      replace    = "warn"
+    }
+    stage.replace {
+      expression = "^ERROR$"
+      source     = "level"
+      replace    = "error"
+    }
+    stage.replace {
+      expression = "^DEBUG$"
+      source     = "level"
+      replace    = "debug"
     }
 
     // Only level is low-cardinality enough to index. Never promote msg/
