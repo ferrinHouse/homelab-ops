@@ -31,9 +31,9 @@ graph TD
         OMV["OpenMediaVault NAS<br/><b>192.168.1.253</b><br/>(NFS Exports)"]
         
         subgraph K3sCluster ["k3s Multi-Node Cluster"]
-            NODE1["<b>kubeprime</b> (192.168.1.247)<br/>Control-Plane / Master (Pi ARM64)<br/>• GitHub Self-Hosted Runner<br/>• Loki (SingleBinary)<br/>• Prometheus (Metrics)<br/>• Mealie App<br/>• Whiskey Tracker<br/>• Obsidian Sync DB"]
-            NODE2["<b>kube2</b> (192.168.1.248)<br/>Worker Node (Pi ARM64)<br/>• Grafana (Pod)<br/>• Nginx Proxy Manager (NPM)<br/>• Mealie Database (Postgres 15)<br/>• Cloudflare DDNS"]
-            NODE3["<b>yoga-node</b> (192.168.1.249)<br/>Worker / Edge Node (x86_64)<br/>• Alloy Collector Daemon<br/>• ServiceLB Mesh"]
+            NODE1["<b>kubeprime</b> (192.168.1.247)<br/>Control-Plane / Master (Pi ARM64)<br/>• GitHub Self-Hosted Runner<br/>• Loki Gateway<br/>• Whiskey Tracker (web)<br/>• Family Travel<br/>• Obsidian Sync DB<br/>• Traefik, CoreDNS"]
+            NODE2["<b>kube2</b> (192.168.1.248)<br/>Worker Node (Pi ARM64)<br/>• Nginx Proxy Manager (NPM)<br/>• NFS Provisioner<br/>• kube-state-metrics"]
+            NODE3["<b>yoga-node</b> (192.168.1.249)<br/>Worker / Edge Node (x86_64)<br/>• Grafana<br/>• Loki + Prometheus<br/>• Plex<br/>• Mealie App + Mealie DB (Postgres)<br/>• Postgres (postgres-service)<br/>• Cloudflare DDNS"]
         end
     end
 
@@ -49,17 +49,25 @@ graph TD
     %% Storage Connections
     OMV -->|NFS Exports| NFS_DYN
     OMV -->|NFS Exports| NFS_STATIC
-    NFS_DYN -.->|monitoring-grafana-pvc-*| NODE2
-    NFS_DYN -.->|monitoring-storage-loki-*| NODE1
-    NFS_DYN -.->|monitoring-prometheus-server-*| NODE1
+    NFS_DYN -.->|monitoring-grafana-pvc-*| NODE3
+    NFS_DYN -.->|monitoring-storage-loki-*| NODE3
+    NFS_DYN -.->|monitoring-prometheus-server-*| NODE3
     NFS_STATIC --> K3sCluster
 
     %% Routing Mesh
     NPM -->|Internal Cross-Node Routing| K3sCluster
 
     %% Observability
-    K3sCluster -.->|Pod Logs via Alloy DaemonSet| NODE1
+    K3sCluster -.->|Pod Logs via Alloy DaemonSet| NODE3
 ```
+
+> [!NOTE]
+> **Pod placement is decided by the Kubernetes scheduler, not pinned.** Only Obsidian Sync DB (`kubeprime`)
+> and Family Travel (`arm64`) carry a `nodeSelector`. Everything else lands wherever there is capacity, so the
+> node lists above are a **snapshot (2026-09-20)** and will drift. Check the live state with
+> `sudo k3s kubectl get pods -A -o wide`. Because most services are reached across nodes, the health of the
+> flannel overlay (see [runbook](#5-a-service-works-on-one-node-ip-but-times-out-on-the-others)) matters more
+> than which node a pod is on.
 
 ---
 
@@ -69,9 +77,18 @@ The cluster is a multi-architecture hybrid running **k3s v1.33.4+k3s1** with **c
 
 | Node Name | IP Address | Roles | Architecture | OS & Kernel | Primary Workloads Hosted |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`kubeprime`** | `192.168.1.247` | `control-plane,master` | ARM64 (Raspberry Pi) | Debian 12 (bookworm) / `6.12.25+rpt-rpi-v8` | Self-hosted GitHub Runner, Loki, Mealie App, Whiskey Tracker, Obsidian Sync, CoreDNS |
-| **`kube2`** | `192.168.1.248` | `worker` | ARM64 (Raspberry Pi) | Debian 12 (bookworm) / `6.12.25+rpt-rpi-v8` | Grafana, Nginx Proxy Manager, Mealie DB (Postgres 15), Cloudflare DDNS, NFS Provisioner |
-| **`yoga-node`** | `192.168.1.249` | `edge,worker` | x86_64 (amd64) | Debian 13 (trixie) / `6.12.107+deb13-amd64` | Alloy collector, K3s ServiceLB proxy mesh |
+| **`kubeprime`** | `192.168.1.247` | `control-plane,master` | ARM64 (Raspberry Pi) | Debian 12 (bookworm) / `6.12.25+rpt-rpi-v8` | Self-hosted GitHub Runner, Loki Gateway, Whiskey Tracker (web), Family Travel, Obsidian Sync DB, Traefik, CoreDNS, metrics-server |
+| **`kube2`** | `192.168.1.248` | `worker` | ARM64 (Raspberry Pi) | Debian 12 (bookworm) / `6.12.25+rpt-rpi-v8` | Nginx Proxy Manager, NFS Provisioner, kube-state-metrics |
+| **`yoga-node`** | `192.168.1.249` | `edge,worker` | x86_64 (amd64) | Debian 13 (trixie) / `6.12.107+deb13-amd64` | Grafana, Loki, Prometheus, Plex, Mealie App + DB, Postgres (`postgres-service`), Cloudflare DDNS |
+
+Every node also runs an **Alloy** collector, a **Loki canary**, a **node-exporter** and the K3s **ServiceLB**
+proxy pods (`svclb-*`) as DaemonSets. `yoga-node` is the newest node (it joined in early September 2026), and
+most of the stateful and monitoring workloads have since been scheduled onto it.
+
+> [!NOTE]
+> `yoga-node` reaches the LAN through a **USB Ethernet adapter** (`enx9cebe86649fd`), and that is the interface
+> flannel binds to for pod networking. The pods on `kubeprime`/`kube2` reach Grafana, Loki, Prometheus and the
+> databases on `yoga-node` across this link.
 
 ---
 
@@ -144,8 +161,10 @@ The cluster runs `nfs-subdir-external-provisioner` with the default StorageClass
 
 ### NodePort Cross-Node Mesh Behavior
 In Kubernetes, **a `NodePort` is accessible on every node's IP address**, regardless of where the pod is physically running:
-- Grafana's pod runs on **`kube2` (`192.168.1.248`)**.
+- Grafana's pod currently runs on **`yoga-node` (`192.168.1.249`)**.
 - However, pointing to **`192.168.1.247:30001` (`kubeprime`)** works seamlessly because `kube-proxy` transparently routes the packets across the internal flannel CNI network (`10.42.x.x`).
+- The flip side: if the flannel overlay breaks on a node, that NodePort **only answers on the node that hosts the pod** and
+  times out on the others (see the [runbook](#5-a-service-works-on-one-node-ip-but-times-out-on-the-others)).
 - **Nginx Proxy Manager (NPM)** is configured as the front-door reverse proxy, handling domain names and Let's Encrypt SSL certificates before proxying upstream to these NodePorts.
 
 ---
@@ -154,16 +173,22 @@ In Kubernetes, **a `NodePort` is accessible on every node's IP address**, regard
 
 | Service Name | Namespace | Node Hosted | Service Type | Internal Port | NodePort / Exposed Port | Upstream Routing URL |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Grafana** | `monitoring` | `kube2` | `NodePort` | `80` | **`30001`** | `http://192.168.1.247:30001` |
-| **Mealie App** | `default` | `kubeprime` | `NodePort` | `9000` | **`30925`** | `http://192.168.1.247:30925` |
-| **Mealie Database**| `default` | `kube2` | `ClusterIP` | `5432` | None (Internal) | `mealiedb-service:5432` |
+| **Grafana** | `monitoring` | `yoga-node` | `NodePort` | `80` | **`30001`** | `http://192.168.1.247:30001` |
+| **Mealie App** | `default` | `yoga-node` | `NodePort` | `9000` | **`30925`** | `http://192.168.1.247:30925` |
+| **Mealie Database**| `default` | `yoga-node` | `ClusterIP` | `5432` | None (Internal) | `mealiedb-service:5432` |
+| **Postgres** | `default` | `yoga-node` | `ClusterIP` | `5432` | None (Internal) | `postgres-service:5432` |
+| **Whiskey Tracker** | `default` | `kubeprime` | `NodePort` | `80` | **`30080`** | `http://192.168.1.247:30080` |
+| **Obsidian CouchDB** | `default` | `kubeprime` | `NodePort` | `5984` | **`30584`** | `http://192.168.1.247:30584` |
 | **Family Travel** | `default` | `kubeprime` | `NodePort` | `80` | **`30090`** | `http://192.168.1.247:30090` |
-| **NPM HTTP/S** | `default` | `kube2` | `NodePort` | `80`, `443` | `80`, `443` | External Gateway |
-| **NPM Admin UI** | `default` | `kube2` | `NodePort` | `81` | `81` | `http://<node-ip>:81` |
-| **Plex Media Web** | `default` | `kube2` | `LoadBalancer` | `32400` | `32400` | `http://<node-ip>:32400` |
+| **NPM HTTP/S/Admin** | `default` | `kube2` | `NodePort` | `80`, `443`, `81` | `30774`, `32316`, `30943` | External gateway (NodePorts per `npm-service`) |
+| **Plex Media Web** | `default` | `yoga-node` | `LoadBalancer` | `32400` | `32400` | `http://<node-ip>:32400` |
+| **Traefik** | `kube-system` | `kubeprime` | `LoadBalancer` | `80`, `443` | `32662`, `30845` | ServiceLB on every node |
 | **Loki Gateway** | `monitoring` | `kubeprime` | `ClusterIP` | `80` | None (Internal) | `http://loki-gateway.monitoring.svc.cluster.local` |
-| **Prometheus Server** | `monitoring` | `kubeprime` | `ClusterIP` | `80` | None (Internal) | `http://prometheus-server.monitoring.svc.cluster.local` |
+| **Loki** | `monitoring` | `yoga-node` | `ClusterIP` | `3100` | None (Internal) | `http://loki.monitoring.svc.cluster.local:3100` |
+| **Prometheus Server** | `monitoring` | `yoga-node` | `ClusterIP` | `80` | None (Internal) | `http://prometheus-server.monitoring.svc.cluster.local` |
 | **Kubernetes API** | `kube-system` | `kubeprime` | Native API | `6443` | `6443` | `https://kubeprime:6443` |
+
+> Node placement in this table is a snapshot from 2026-09-20; see the note under the architecture diagram.
 
 ---
 
@@ -203,7 +228,7 @@ Automated deployments are managed by GitHub Actions using a self-hosted runner o
 Containers in k3s do not run on the host's raw filesystem; they run inside `containerd` isolated overlays.
 - **To inspect files inside the running container**:
   ```bash
-  sudo k3s kubectl exec -it -n monitoring grafana-86ccb98c8b-vqzqc -- ls -la /var/lib/grafana
+  sudo k3s kubectl exec -it -n monitoring deploy/grafana -- ls -la /var/lib/grafana
   ```
 - **To see the active configuration files (`grafana.ini`, `datasources.yaml`)**:
   ```bash
@@ -230,6 +255,30 @@ sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade --install prometheus prom
   --namespace monitoring --create-namespace \
   -f k8s/monitoring/values-prometheus.yaml
 ```
+
+#### 5. A service works on one node IP but times out on the others
+Symptom: e.g. Grafana answers on `192.168.1.249:30001` but `192.168.1.247:30001` and `192.168.1.248:30001` time out,
+Alloy logs `context deadline exceeded` pushing to `loki-gateway`, and Prometheus shows `up == 0` for `kube-state-metrics`
+(a pod on `kube2` that Prometheus on `yoga-node` can only scrape across the overlay).
+This means **cross-node pod networking (the flannel VXLAN overlay) is down on at least one node**, not that the app is down.
+
+```bash
+# On the affected node: the VXLAN device and routes to the other nodes' pod CIDRs should exist
+ip -br link show flannel.1
+ip route | grep 10.42
+
+# From another node: can it reach a pod on the affected node? (use a pod IP from `get pods -o wide`)
+ping -c3 <pod-ip>
+
+# Fix: restarting the agent recreates flannel.1 and its routes (pods keep running)
+sudo systemctl restart k3s-agent        # on a worker (yoga-node, kube2)
+# on kubeprime (the server) the unit is `k3s`, but restarting it interrupts the API server, so plan for that
+```
+
+**Incident 2026-09-19/20:** `flannel.1` disappeared from `yoga-node` (roughly 01:36 on Sep 19) with nothing logged by
+flannel or k3s. All traffic between `yoga-node` and the Pi nodes silently failed for about 41 hours while every pod
+stayed `Running`. Restarting `k3s-agent` fixed it. The trigger was not identified; if it recurs, capture
+`sudo journalctl --since <date> | grep -iE 'flannel\.1|enx9cebe86649fd|NetworkManager|carrier|link'` **before** restarting.
 
 ### Routine Cluster Administration Commands
 
