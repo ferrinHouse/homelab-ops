@@ -172,7 +172,22 @@ In Kubernetes, **a `NodePort` is accessible on every node's IP address**, regard
 ### 1. Observability Stack (`monitoring` namespace)
 - **Grafana**: Visualizations and dashboards, pinned to NodePort `30001`, dynamically backed by 2 Gi on OMV. Pre-wired with internal Loki and Prometheus datasources.
 - **Loki**: Deployed in `SingleBinary` mode, TSDB v13 schema, with distributed memory caches disabled to fit comfortably within Pi RAM.
-- **Prometheus**: Metrics storage deployed via Helm (`prometheus-community/prometheus`) with 20 Gi dynamic NFS storage on OMV (15-day retention), Node Exporter daemonset for host-level hardware and OS telemetry (`node_*`), and resource limits optimized for Raspberry Pi. Heavy auxiliary components (Alertmanager, Pushgateway) are disabled to preserve RAM.
+- **Prometheus**: Metrics storage deployed via Helm (`prometheus-community/prometheus`) with 20 Gi dynamic NFS storage on OMV (15-day retention), Node Exporter daemonset for host-level hardware and OS telemetry (`node_*`), and resource limits optimized for Raspberry Pi. Heavy auxiliary components (Alertmanager, Pushgateway) are disabled to preserve RAM; alerting is handled by Grafana instead (below).
+- **Alerting (Grafana-managed)**: Six rules in the `Homelab` folder, provisioned from `alerting:` in [`values-grafana.yaml`](k8s/monitoring/values-grafana.yaml) and evaluated every minute against Prometheus. Notifications go by email (Gmail SMTP) to the `homelab-email` contact point, grouped by alert name and repeated every 12h while firing.
+
+  | Rule | Fires when | For | Severity |
+  | :--- | :--- | :--- | :--- |
+  | Scrape target down | any Prometheus target has `up < 1` (also fires if Prometheus itself is unreachable) | 5m | critical |
+  | Node not Ready | `kube_node_status_condition{Ready}` is not true | 5m | critical |
+  | Pod restarting repeatedly | more than 3 container restarts in 15m | 5m | warning |
+  | Pod running but not Ready | a `Running` pod fails readiness (finished Job pods are ignored) | 10m | warning |
+  | Node memory low | under 10% memory available | 10m | warning |
+  | Node disk space low | under 10% free on an ext4/xfs/btrfs mount | 15m | warning |
+
+  "Scrape target down" is the one that catches a broken flannel overlay: `kube-state-metrics` is only reachable from Prometheus across nodes, so it drops out when cross-node networking fails (this would have flagged the 2026-09-19/20 outage within 5 minutes). Rules are read-only in the Grafana UI; change them in the values file. Because the chart runs `alerting:` through Helm `tpl`, Grafana templates like `$labels.instance` must use Helm's raw-string escape (see the comment in the values file).
+
+  > [!NOTE]
+  > **Known blind spot:** alerts are evaluated and sent by Grafana, which is a single pod. If Grafana itself, or the node it runs on, goes down, nothing is sent. Catching that needs an external heartbeat (e.g. a dead-man's-switch service), which is not set up.
 - **Grafana Alloy**: Deployed as a `DaemonSet` running on all nodes (`kubeprime`, `kube2`, `yoga-node`). It tails all pod logs and extracts structured JSON fields (`Level`, `Message`, `WhiskeyName`, `Query`) for the Whiskey Tracker app before shipping to Loki.
 
 ### 2. Application Services (`default` namespace)
@@ -318,6 +333,11 @@ and restarts the affected deployments so rotated values take effect immediately.
 **To rotate a credential**: update the value in GitHub Actions repo secrets (Settings → Secrets and
 variables → Actions), then push any change to `main` (or run the workflow manually via
 `workflow_dispatch`) to roll it out.
+
+Grafana's alert email login is the `grafana-smtp` Secret in the `monitoring` namespace. CI creates it (before the
+Grafana upgrade, since the pod cannot start without it) from the same Gmail account and the same
+`MEALIE_SMTP_PASSWORD` GitHub secret that Mealie uses, so rotating that one secret rotates both. Grafana only reads
+it at startup, so after a rotation also run `sudo k3s kubectl rollout restart deployment/grafana -n monitoring`.
 
 `cloudflare-secrets`, `travel-secrets`, and `ghcr-secret` currently still need to be created
 out-of-band on the cluster (`kubectl create secret ...`) since CI doesn't manage them yet — folding

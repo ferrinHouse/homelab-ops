@@ -3,7 +3,10 @@ datasources:
     apiVersion: 1
     # Automatically add Loki as a default data source
     datasources:
+      # UIDs are pinned to the values Grafana originally auto-generated so the alert
+      # rules below can reference them and a rebuilt cluster gets the same IDs.
       - name: Loki
+        uid: P8E80F9AEF21F6940
         type: loki
         # Matches the release name and namespace "monitoring"
         url: http://loki-gateway.monitoring.svc.cluster.local
@@ -13,6 +16,7 @@ datasources:
           # Limit max lines to conserve browser memory and network bandwidth
           maxLines: 1000
       - name: Prometheus
+        uid: PBFA97CFB590B2093
         type: prometheus
         # Matches the Prometheus release name and namespace "monitoring"
         url: http://prometheus-server.monitoring.svc.cluster.local
@@ -24,6 +28,20 @@ env:
   GF_SECURITY_ALLOW_EMBEDDING: "true"
   GF_AUTH_ANONYMOUS_ENABLED: "true"
   GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+  # Outbound email for alert notifications. Credentials come from the grafana-smtp
+  # Secret (see smtp.existingSecret below); the sender is the same Gmail account Mealie uses.
+  GF_SMTP_ENABLED: "true"
+  GF_SMTP_HOST: "smtp.gmail.com:587"
+  GF_SMTP_FROM_ADDRESS: "mike.ferrin.84+ferrinmealplanner@gmail.com"
+  GF_SMTP_FROM_NAME: "Homelab Grafana"
+  GF_SMTP_STARTTLS_POLICY: "MandatoryStartTLS"
+
+# GF_SMTP_USER / GF_SMTP_PASSWORD are injected from this Secret, which ci.yaml creates
+# BEFORE the Grafana Helm upgrade (the pod cannot start without it).
+smtp:
+  existingSecret: "grafana-smtp"
+  userKey: "user"
+  passwordKey: "password"
 
 # Grafana optimization for Pi
 resources:
@@ -48,4 +66,189 @@ service:
 # Disable Traefik ingress since we are using NPM
 ingress:
   enabled: false
+
+# Grafana-managed alerting, provisioned from files (rules appear read-only in the UI).
+#
+# WARNING: the Grafana chart passes everything under `alerting:` through Helm's `tpl`, so a
+# literal Grafana template such as $labels.instance must be written with Helm's raw-string
+# escape (open-braces, backtick, the Grafana template, backtick, close-braces). Unescaped
+# double braces get evaluated by Helm and break the rule. Same trap as k8s/monitoring/config.alloy.
+#
+# Every rule is built as A (instant PromQL) -> B (reduce: last) -> C (threshold), against
+# the raw metric rather than a PromQL-filtered one, so a healthy cluster returns data
+# instead of "no data". Verified against live Prometheus: nothing fires at time of writing.
+alerting:
+  contactpoints.yaml:
+    apiVersion: 1
+    contactPoints:
+      - orgId: 1
+        name: homelab-email
+        receivers:
+          - uid: homelab-email
+            type: email
+            settings:
+              # Plus-address of the same Gmail inbox, so alerts can be filtered/labelled.
+              addresses: "mike.ferrin.84+homelab-alerts@gmail.com"
+              singleEmail: true
+
+  policies.yaml:
+    apiVersion: 1
+    policies:
+      - orgId: 1
+        receiver: homelab-email
+        group_by: ["alertname"]
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 12h
+
+  rules.yaml:
+    apiVersion: 1
+    groups:
+      - orgId: 1
+        name: cluster-health
+        folder: Homelab
+        interval: 1m
+        rules:
+          # Would have caught the 2026-09-19/20 flannel outage: kube-state-metrics (kube2) can
+          # only be scraped from Prometheus (yoga-node) across the overlay, so it went down.
+          # noDataState=Alerting: `up` always exists, so no data means Prometheus is unreachable.
+          - uid: target-down
+            title: Scrape target down
+            condition: C
+            for: 5m
+            noDataState: Alerting
+            execErrState: Alerting
+            labels:
+              severity: critical
+            annotations:
+              summary: 'Scrape target {{`{{ $labels.job }}`}} / {{`{{ $labels.instance }}`}} is down'
+              description: 'Prometheus cannot scrape {{`{{ $labels.instance }}`}} (job {{`{{ $labels.job }}`}}) for 5m. If several targets on different nodes are down, suspect the flannel overlay (README runbook section 5).'
+            data:
+              - refId: A
+                relativeTimeRange: { from: 600, to: 0 }
+                datasourceUid: PBFA97CFB590B2093
+                model: { refId: A, expr: 'up', instant: true, intervalMs: 1000, maxDataPoints: 43200 }
+              - refId: B
+                datasourceUid: __expr__
+                model: { refId: B, type: reduce, expression: A, reducer: last, settings: { mode: dropNN } }
+              - refId: C
+                datasourceUid: __expr__
+                model: { refId: C, type: threshold, expression: B, conditions: [ { evaluator: { type: lt, params: [1] } } ] }
+
+          - uid: node-not-ready
+            title: Node not Ready
+            condition: C
+            for: 5m
+            noDataState: OK
+            execErrState: Alerting
+            labels:
+              severity: critical
+            annotations:
+              summary: 'Node {{`{{ $labels.node }}`}} is not Ready'
+              description: 'Kubernetes reports node {{`{{ $labels.node }}`}} as not Ready for 5m.'
+            data:
+              - refId: A
+                relativeTimeRange: { from: 600, to: 0 }
+                datasourceUid: PBFA97CFB590B2093
+                model: { refId: A, expr: 'kube_node_status_condition{condition="Ready",status="true"}', instant: true, intervalMs: 1000, maxDataPoints: 43200 }
+              - refId: B
+                datasourceUid: __expr__
+                model: { refId: B, type: reduce, expression: A, reducer: last, settings: { mode: dropNN } }
+              - refId: C
+                datasourceUid: __expr__
+                model: { refId: C, type: threshold, expression: B, conditions: [ { evaluator: { type: lt, params: [1] } } ] }
+
+          - uid: pod-crash-looping
+            title: Pod restarting repeatedly
+            condition: C
+            for: 5m
+            noDataState: OK
+            execErrState: Alerting
+            labels:
+              severity: warning
+            annotations:
+              summary: 'Pod {{`{{ $labels.namespace }}`}}/{{`{{ $labels.pod }}`}} keeps restarting'
+              description: 'Container {{`{{ $labels.container }}`}} in {{`{{ $labels.namespace }}`}}/{{`{{ $labels.pod }}`}} restarted more than 3 times in 15m.'
+            data:
+              - refId: A
+                relativeTimeRange: { from: 600, to: 0 }
+                datasourceUid: PBFA97CFB590B2093
+                model: { refId: A, expr: 'increase(kube_pod_container_status_restarts_total[15m])', instant: true, intervalMs: 1000, maxDataPoints: 43200 }
+              - refId: B
+                datasourceUid: __expr__
+                model: { refId: B, type: reduce, expression: A, reducer: last, settings: { mode: dropNN } }
+              - refId: C
+                datasourceUid: __expr__
+                model: { refId: C, type: threshold, expression: B, conditions: [ { evaluator: { type: gt, params: [3] } } ] }
+
+          # Only pods in phase Running are considered, so finished Job pods (Completed) never alert.
+          - uid: pod-not-ready
+            title: Pod running but not Ready
+            condition: C
+            for: 10m
+            noDataState: OK
+            execErrState: Alerting
+            labels:
+              severity: warning
+            annotations:
+              summary: 'Pod {{`{{ $labels.namespace }}`}}/{{`{{ $labels.pod }}`}} is not Ready'
+              description: 'Pod {{`{{ $labels.namespace }}`}}/{{`{{ $labels.pod }}`}} has been Running but failing its readiness check for 10m.'
+            data:
+              - refId: A
+                relativeTimeRange: { from: 600, to: 0 }
+                datasourceUid: PBFA97CFB590B2093
+                model: { refId: A, expr: 'kube_pod_status_ready{condition="true"} * on(namespace,pod) (kube_pod_status_phase{phase="Running"} == 1)', instant: true, intervalMs: 1000, maxDataPoints: 43200 }
+              - refId: B
+                datasourceUid: __expr__
+                model: { refId: B, type: reduce, expression: A, reducer: last, settings: { mode: dropNN } }
+              - refId: C
+                datasourceUid: __expr__
+                model: { refId: C, type: threshold, expression: B, conditions: [ { evaluator: { type: lt, params: [1] } } ] }
+
+          - uid: node-memory-low
+            title: Node memory low
+            condition: C
+            for: 10m
+            noDataState: OK
+            execErrState: Alerting
+            labels:
+              severity: warning
+            annotations:
+              summary: 'Node {{`{{ $labels.node }}`}} has under 10% memory available'
+              description: 'Available memory on {{`{{ $labels.node }}`}} has been below 10% for 10m.'
+            data:
+              - refId: A
+                relativeTimeRange: { from: 600, to: 0 }
+                datasourceUid: PBFA97CFB590B2093
+                model: { refId: A, expr: 'node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes', instant: true, intervalMs: 1000, maxDataPoints: 43200 }
+              - refId: B
+                datasourceUid: __expr__
+                model: { refId: B, type: reduce, expression: A, reducer: last, settings: { mode: dropNN } }
+              - refId: C
+                datasourceUid: __expr__
+                model: { refId: C, type: threshold, expression: B, conditions: [ { evaluator: { type: lt, params: [0.1] } } ] }
+
+          # kube2 (23% free) and kubeprime (32% free) are Pi SD cards; watch these.
+          - uid: node-disk-low
+            title: Node disk space low
+            condition: C
+            for: 15m
+            noDataState: OK
+            execErrState: Alerting
+            labels:
+              severity: warning
+            annotations:
+              summary: 'Node {{`{{ $labels.node }}`}} has under 10% disk free on {{`{{ $labels.mountpoint }}`}}'
+              description: 'Filesystem {{`{{ $labels.mountpoint }}`}} on {{`{{ $labels.node }}`}} has been below 10% free for 15m.'
+            data:
+              - refId: A
+                relativeTimeRange: { from: 600, to: 0 }
+                datasourceUid: PBFA97CFB590B2093
+                model: { refId: A, expr: 'node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs"} / node_filesystem_size_bytes{fstype=~"ext4|xfs|btrfs"}', instant: true, intervalMs: 1000, maxDataPoints: 43200 }
+              - refId: B
+                datasourceUid: __expr__
+                model: { refId: B, type: reduce, expression: A, reducer: last, settings: { mode: dropNN } }
+              - refId: C
+                datasourceUid: __expr__
+                model: { refId: C, type: threshold, expression: B, conditions: [ { evaluator: { type: lt, params: [0.1] } } ] }
 
