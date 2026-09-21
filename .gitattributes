@@ -1,0 +1,4 @@
+# Host scripts under hosts/ are copied to Linux machines by hand, so they must keep LF line endings
+# even when checked out on Windows (core.autocrlf=true would otherwise give them CRLF, and a CRLF
+# shebang line fails with "bad interpreter" / "\r: command not found").
+hosts/** text eol=lf
