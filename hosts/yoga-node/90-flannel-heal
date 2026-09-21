@@ -1,0 +1,41 @@
+#!/bin/sh
+# NetworkManager dispatcher script for yoga-node: recreate flannel.1 after the USB dock NIC resets.
+#
+# Why this exists: yoga-node reaches the LAN through a USB Ethernet adapter in a Dell Universal
+# Dock D6000. When the dock resets, the kernel unregisters the NIC and immediately deletes
+# flannel.1 (a VXLAN device built on top of it). The NIC comes back within seconds, but
+# k3s-agent never recreates flannel.1, so every pod on this node is cut off from the other
+# nodes until the agent is restarted. See README runbook section 5 (incident 2026-09-20).
+#
+# What it does: when the NIC finishes coming up (NetworkManager action "up") and flannel.1 is
+# missing while k3s-agent is running, restart k3s-agent. Pods keep running across the restart.
+# It is a no-op in every other case, so it is safe on every NIC "up" event, including boot.
+#
+# Install (on yoga-node; NetworkManager refuses scripts that are not root-owned or that are
+# group/world-writable):
+#   sudo install -o root -g root -m 0755 90-flannel-heal /etc/NetworkManager/dispatcher.d/90-flannel-heal
+#
+# NOTE: this is NOT deployed by CI (ci.yaml only applies k8s manifests and Helm values). The copy
+# in the repo is the source of truth; re-install it by hand if yoga-node is rebuilt.
+
+# The interface flannel is bound to. Its name comes from the dock's MAC address, so if the dock
+# or adapter is ever replaced the name changes and this must be updated (check with `ip -br link`).
+NIC="enx9cebe86649fd"
+SERVICE="k3s-agent"
+
+IFACE="$1"
+ACTION="$2"
+
+[ "$IFACE" = "$NIC" ] || exit 0
+[ "$ACTION" = "up" ] || exit 0
+
+# Not running (e.g. NIC came up during boot before k3s-agent started): k3s will create flannel.1
+# itself, so restarting would only cause a needless bounce.
+systemctl is-active --quiet "$SERVICE" || exit 0
+
+# Overlay is intact, nothing to do.
+ip link show flannel.1 >/dev/null 2>&1 && exit 0
+
+logger -t flannel-heal "$NIC is up but flannel.1 is missing; restarting $SERVICE"
+# --no-block: the dispatcher must return quickly.
+systemctl --no-block restart "$SERVICE"

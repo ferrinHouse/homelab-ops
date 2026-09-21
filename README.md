@@ -86,9 +86,11 @@ proxy pods (`svclb-*`) as DaemonSets. `yoga-node` is the newest node (it joined 
 most of the stateful and monitoring workloads have since been scheduled onto it.
 
 > [!NOTE]
-> `yoga-node` reaches the LAN through a **USB Ethernet adapter** (`enx9cebe86649fd`), and that is the interface
-> flannel binds to for pod networking. The pods on `kubeprime`/`kube2` reach Grafana, Loki, Prometheus and the
-> databases on `yoga-node` across this link.
+> `yoga-node` reaches the LAN through a **USB Ethernet adapter** (`enx9cebe86649fd`) inside a **Dell Universal Dock
+> D6000**, and that is the interface flannel binds to for pod networking. The pods on `kubeprime`/`kube2` reach
+> Grafana, Loki, Prometheus and the databases on `yoga-node` across this link. **A dock reset has been confirmed
+> to silently break the overlay** (an earlier outage the day before looks identical); see the [runbook](#5-a-service-works-on-one-node-ip-but-times-out-on-the-others)
+> for the cause and the auto-heal script.
 
 ---
 
@@ -275,10 +277,61 @@ sudo systemctl restart k3s-agent        # on a worker (yoga-node, kube2)
 # on kubeprime (the server) the unit is `k3s`, but restarting it interrupts the API server, so plan for that
 ```
 
-**Incident 2026-09-19/20:** `flannel.1` disappeared from `yoga-node` (roughly 01:36 on Sep 19) with nothing logged by
-flannel or k3s. All traffic between `yoga-node` and the Pi nodes silently failed for about 41 hours while every pod
-stayed `Running`. Restarting `k3s-agent` fixed it. The trigger was not identified; if it recurs, capture
-`sudo journalctl --since <date> | grep -iE 'flannel\.1|enx9cebe86649fd|NetworkManager|carrier|link'` **before** restarting.
+##### Known cause on `yoga-node`: the USB dock resets
+`yoga-node`'s only network link is the NIC inside a **Dell Universal Dock D6000** (USB `17e9:6006`, `cdc_ncm` driver).
+`flannel.1` is a VXLAN device built on that NIC, so when the dock resets, the kernel unregisters the NIC and deletes
+`flannel.1` in the same second. The NIC is back within a few seconds (NetworkManager re-DHCPs the same IP), but
+`k3s-agent` never recreates `flannel.1`, so the overlay stays down until the agent is restarted. Every pod stays
+`Running` the whole time, which is why it is easy to miss.
+
+To confirm it was this (the journal is persistent, so this works **after** a restart too), look for the sequence
+around the time `up` dropped to `0`:
+```bash
+sudo journalctl --since "<date> <time>" --until "<date> <time+10m>" --no-pager | grep -E \
+  "reset SuperSpeed|unregister 'cdc_ncm'|flannel.1.*removed|not found in the host's network interfaces"
+# usb 2-4.1: reset SuperSpeed USB device number 3 using xhci_hcd       <- the dock resets
+# cdc_ncm ... enx9cebe86649fd: unregister 'cdc_ncm' ...               <- NIC removed
+# NetworkManager: device (flannel.1): ... 'removed'                   <- flannel.1 goes with it
+# k3s: node IP "192.168.1.249" not found in the host's network interfaces
+```
+The USB reset itself has no known trigger yet (nothing was logged in the ~3 minutes before it). The dock's DisplayLink video interface
+is not claimed by any driver, and USB autosuspend is already disabled (`usbcore.autosuspend=-1`), so neither looks
+responsible. Swapping the dock's cable/port, or using a plain USB Ethernet adapter instead of the dock, are the
+cheapest experiments.
+
+##### Auto-heal: `hosts/yoga-node/90-flannel-heal`
+A NetworkManager dispatcher script that restarts `k3s-agent` when the NIC comes back up and `flannel.1` is missing
+(and does nothing otherwise, including at boot). It turns a hours-long silent outage into a blip of a few seconds.
+
+> [!IMPORTANT]
+> **CI does not deploy this.** `ci.yaml` only applies Kubernetes manifests and Helm values, and its runner lives on
+> `kubeprime`. The file in the repo is the source of truth and a record of why it exists; it must be installed on
+> `yoga-node` by hand, and again if `yoga-node` is rebuilt.
+
+```bash
+# On yoga-node, from a checkout of this repo (NetworkManager ignores scripts that are not root-owned or are group/world-writable)
+sudo install -o root -g root -m 0755 hosts/yoga-node/90-flannel-heal /etc/NetworkManager/dispatcher.d/90-flannel-heal
+
+# When it acts, it logs under its own tag:
+sudo journalctl -t flannel-heal
+```
+The script is bound to the NIC by name (`enx9cebe86649fd`, derived from the dock's MAC address). If the dock or adapter
+is replaced the name changes and the script silently does nothing until `NIC=` at the top is updated (`ip -br link`).
+
+To test the heal path on purpose (this drops `yoga-node`'s network for a few seconds, so run it from the local console
+or inside `tmux`, not over an SSH session that rides the same NIC):
+```bash
+sudo ip link delete flannel.1 && sudo nmcli connection up "Wired connection 1"
+# within ~10-20s: `ip -br link show flannel.1` reappears and `journalctl -t flannel-heal` shows the restart
+```
+
+##### Incident log
+- **2026-09-19 01:36 to 2026-09-20 ~18:29 (~41h):** `flannel.1` disappeared from `yoga-node`. Found from the symptoms above
+  and fixed by restarting `k3s-agent`. Nothing was logged by flannel or k3s, and this outage's journal was not
+  inspected, so it is **probably but not provably** the same dock reset.
+- **2026-09-20 20:33 to 2026-09-21 ~09:26 (~13h):** same symptom, and here the journal confirms the dock reset
+  (`reset SuperSpeed USB device number 3` at 20:33:23, NIC unregistered, `flannel.1` removed in the same second).
+  Fixed by restarting `k3s-agent`.
 
 ### Routine Cluster Administration Commands
 

@@ -30,6 +30,15 @@ high-blast-radius: confirm with the user before pushing changes to `main` for fi
 redeploy a running service, and always check whether a change is scoped to `k8s/monitoring/**`,
 `k8s/storage/**`, or `k8s/configs/**` before assuming it will (or won't) trigger CI.
 
+## Host-level files (`hosts/**`) are NOT deployed by CI
+
+`hosts/<node>/` holds files that live on a node's own filesystem, outside Kubernetes (currently
+`hosts/yoga-node/90-flannel-heal`, a NetworkManager dispatcher script). `ci.yaml` neither watches nor
+applies this directory, and its runner is on `kubeprime`, so merging a change here installs nothing. The repo
+copy is the source of truth and a record; a human has to install it on the node (each file's header and the
+README runbook give the command). If you change one, say so plainly rather than implying it is live. The files
+are pinned to LF line endings in `.gitattributes` because a CRLF shebang breaks them on Linux.
+
 ## Alloy log pipeline (`k8s/monitoring/config.alloy`)
 
 The `config.alloy` file defines Grafana Alloy's log-processing pipeline and has a non-obvious constraint:
