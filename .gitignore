@@ -1,1 +1,4 @@
 .github_token
+
+# Local network inventory (device list, kept out of the repo)
+docs/network-inventory.md

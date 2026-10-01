@@ -27,7 +27,7 @@ Welcome to the **Ferrin Homelab** infrastructure and operations repository. This
 
 ```mermaid
 graph TD
-    subgraph LAN ["Home LAN (192.168.1.0/24)"]
+    subgraph LAN ["Home LAN (192.168.0.0/16)"]
         OMV["OpenMediaVault NAS<br/><b>192.168.1.253</b><br/>(NFS Exports)"]
         
         subgraph K3sCluster ["k3s Multi-Node Cluster"]
@@ -160,6 +160,12 @@ The cluster runs `nfs-subdir-external-provisioner` with the default StorageClass
 ---
 
 ## 🌐 Networking & Ingress Routing
+
+### LAN Layout
+The router (`192.168.8.1`) runs the main LAN as a single **`/16`** (`192.168.0.0/16`), so the cluster/NAS hosts in
+`192.168.1.x` and the Wi-Fi clients in `192.168.8.x` share one layer-2 network. IoT devices live on a separate
+`10.10.10.0/24` network (`br-iot`). A full device inventory is kept locally in `docs/network-inventory.md`, which is
+git-ignored.
 
 ### NodePort Cross-Node Mesh Behavior
 In Kubernetes, **a `NodePort` is accessible on every node's IP address**, regardless of where the pod is physically running:
