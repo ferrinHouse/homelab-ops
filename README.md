@@ -190,6 +190,7 @@ In Kubernetes, **a `NodePort` is accessible on every node's IP address**, regard
 | **Family Travel** | `default` | `kubeprime` | `NodePort` | `80` | **`30090`** | `http://192.168.1.247:30090` |
 | **NPM HTTP/S/Admin** | `default` | `kube2` | `NodePort` | `80`, `443`, `81` | `30774`, `32316`, `30943` | External gateway (NodePorts per `npm-service`) |
 | **Plex Media Web** | `default` | `yoga-node` | `LoadBalancer` | `32400` | `32400` | `http://<node-ip>:32400` |
+| **Frigate NVR** | `host (Docker)` | `yoga-node` | `Host / Direct` | `8971`, `5000` | `8971`, `5000` | `http://192.168.1.249:8971` |
 | **Traefik** | `kube-system` | `kubeprime` | `LoadBalancer` | `80`, `443` | `32662`, `30845` | ServiceLB on every node |
 | **Loki Gateway** | `monitoring` | `kubeprime` | `ClusterIP` | `80` | None (Internal) | `http://loki-gateway.monitoring.svc.cluster.local` |
 | **Loki** | `monitoring` | `yoga-node` | `ClusterIP` | `3100` | None (Internal) | `http://loki.monitoring.svc.cluster.local:3100` |
@@ -215,6 +216,9 @@ In Kubernetes, **a `NodePort` is accessible on every node's IP address**, regard
 - **Cloudflare DDNS**: Automatically keeps external DNS records synchronized with the homelab's dynamic public IP.
 - **Plex Media Server**: Media server with an init container cloning/updating the `Audnexus.bundle` plugin for audiobook metadata.
 - **Family Travel Adventures**: Modern itinerary, packing, and meal planning web application built with **Next.js 16 (App Router)**, **React 19**, and **Prisma 7** using SQLite (`travel.db`). Deployed from the `travel` repository as a standalone Alpine container (`ghcr.io/ferrinhouse/travel-site:latest`) with automatic `prisma db push` migrations on startup, backed by `/export/travel-db` on OMV, and served via NodePort `30090`.
+
+### 3. Edge Services (Host Docker on `yoga-node`)
+- **Frigate NVR & go2rtc**: Real-time NVR integrating 3 Wyze Cams (Thingino firmware) on the IoT subnet (`10.10.10.x`) with Intel OpenVINO AI detection on the UHD Graphics iGPU, VAAPI hardware decode, and local NVMe storage. Detailed in [`docs/nvr-frigate-architecture.md`](docs/nvr-frigate-architecture.md).
 
 ---
 

@@ -1,0 +1,26 @@
+services:
+  frigate:
+    container_name: frigate
+    privileged: true # Allows access to /dev/dri Intel GPU devices
+    restart: unless-stopped
+    image: ghcr.io/blakeblackshear/frigate:stable
+    shm_size: "1024mb" # Shared memory in RAM for decoding buffers
+    devices:
+      - /dev/dri/renderD128:/dev/dri/renderD128
+      - /dev/dri/card0:/dev/dri/card0
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /opt/frigate/config/config.yml:/config/config.yml
+      - /var/lib/frigate/storage:/media/frigate
+      - type: tmpfs
+        target: /tmp/cache
+        tmpfs:
+          size: 1000000000 # 1GB in RAM for segment cache before disk writes
+    ports:
+      - "8971:8971" # Frigate authenticated web interface
+      - "5000:5000" # Frigate API & Home Assistant integration
+      - "8554:8554" # RTSP feeds from go2rtc
+      - "8555:8555/tcp" # WebRTC
+      - "8555:8555/udp" # WebRTC
+    environment:
+      - FRIGATE_RTSP_PASSWORD=password # Optional authentication for outgoing restream
