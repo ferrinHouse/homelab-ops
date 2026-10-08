@@ -10,7 +10,7 @@ services:
       - /dev/dri/card0:/dev/dri/card0
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - /opt/frigate/config/config.yml:/config/config.yml
+      - /opt/frigate/config:/config
       - /var/lib/frigate/storage:/media/frigate
       - type: tmpfs
         target: /tmp/cache
