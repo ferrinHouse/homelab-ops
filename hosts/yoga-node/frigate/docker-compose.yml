@@ -24,3 +24,4 @@ services:
       - "8555:8555/udp" # WebRTC
     environment:
       - FRIGATE_RTSP_PASSWORD=password # Optional authentication for outgoing restream
+      - FRIGATE_MQTT_PASSWORD=${FRIGATE_MQTT_PASSWORD}
