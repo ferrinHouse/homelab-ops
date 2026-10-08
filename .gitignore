@@ -2,3 +2,7 @@
 
 # Local network inventory (device list, kept out of the repo)
 docs/network-inventory.md
+
+# NAS cleanup lists (personal file names, kept local)
+docs/music-*.md
+docs/photos-*.md

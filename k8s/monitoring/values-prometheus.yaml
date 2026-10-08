@@ -58,3 +58,12 @@ kube-state-metrics:
     limits:
       cpu: 100m
       memory: 64Mi
+
+# Scrape configs for edge services outside Kubernetes
+extraScrapeConfigs: |
+  - job_name: 'frigate'
+    metrics_path: '/api/metrics'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['192.168.1.249:5000']
+
