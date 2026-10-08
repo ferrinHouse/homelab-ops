@@ -45,6 +45,17 @@ jobs:
             --namespace monitoring --create-namespace \
             -f k8s/monitoring/values-prometheus.yaml
 
+      # Must run BEFORE the Grafana upgrade: values-grafana.yaml injects GF_SMTP_USER/PASSWORD
+      # from this Secret, and the pod will not start (CreateContainerConfigError) without it.
+      # Reuses the Gmail account/app password that Mealie already sends mail with.
+      - name: Create Grafana SMTP Secret
+        run: |
+          kubectl create secret generic grafana-smtp \
+            --namespace monitoring \
+            --from-literal=user="mike.ferrin.84+ferrinmealplanner@gmail.com" \
+            --from-literal=password="${{ secrets.MEALIE_SMTP_PASSWORD }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Deploy Grafana
         run: |
           helm upgrade --install grafana grafana/grafana \
