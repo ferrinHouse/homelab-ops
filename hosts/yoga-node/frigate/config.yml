@@ -24,6 +24,10 @@ ffmpeg:
 
 # go2rtc handles RTSP restreaming and ultra-low latency WebRTC viewing
 go2rtc:
+  homeassistant:
+    url: http://192.168.1.254:8123
+    token: "{FRIGATE_HASS_TOKEN}"
+
   streams:
     wyzecam1_main:
       - rtsp://thingino:thingino@10.10.10.198:554/ch0
@@ -37,6 +41,14 @@ go2rtc:
       - rtsp://thingino:thingino@10.10.10.226:554/ch0
     wyzecam3_sub:
       - rtsp://thingino:thingino@10.10.10.226:554/ch1
+    vivint_doorbell_main:
+      - rtsp://user:{FRIGATE_VIVINT_RTSP_PASSWORD}@10.10.10.218:8554/Video-100
+    vivint_doorbell_sub:
+      - rtsp://user:{FRIGATE_VIVINT_RTSP_PASSWORD}@10.10.10.218:8554/Video-100_SD
+    vivint_driveway_main:
+      - rtsp://user:{FRIGATE_VIVINT_RTSP_PASSWORD}@10.10.10.218:8554/Video-108
+    vivint_driveway_sub:
+      - rtsp://user:{FRIGATE_VIVINT_RTSP_PASSWORD}@10.10.10.218:8554/Video-108_SD
 
 cameras:
   wyzecam1:
@@ -112,6 +124,64 @@ cameras:
       enabled: true
       width: 640
       height: 360
+      fps: 15
+    record:
+      enabled: true
+      alerts:
+        retain:
+          days: 14
+      detections:
+        retain:
+          days: 14
+      continuous:
+        days: 3
+      motion:
+        days: 0
+
+  vivint_doorbell:
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/vivint_doorbell_sub?video=copy
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+        - path: rtsp://127.0.0.1:8554/vivint_doorbell_main?video=copy
+          input_args: preset-rtsp-restream
+          roles:
+            - record
+    detect:
+      enabled: true
+      width: 512
+      height: 512
+      fps: 15
+    record:
+      enabled: true
+      alerts:
+        retain:
+          days: 14
+      detections:
+        retain:
+          days: 14
+      continuous:
+        days: 3
+      motion:
+        days: 0
+
+  vivint_driveway:
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/vivint_driveway_sub?video=copy
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+        - path: rtsp://127.0.0.1:8554/vivint_driveway_main?video=copy
+          input_args: preset-rtsp-restream
+          roles:
+            - record
+    detect:
+      enabled: true
+      width: 720
+      height: 400
       fps: 15
     record:
       enabled: true

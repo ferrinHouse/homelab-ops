@@ -25,3 +25,5 @@ services:
     environment:
       - FRIGATE_RTSP_PASSWORD=password # Optional authentication for outgoing restream
       - FRIGATE_MQTT_PASSWORD=${FRIGATE_MQTT_PASSWORD}
+      - FRIGATE_HASS_TOKEN=${FRIGATE_HASS_TOKEN}
+      - FRIGATE_VIVINT_RTSP_PASSWORD=${FRIGATE_VIVINT_RTSP_PASSWORD}
