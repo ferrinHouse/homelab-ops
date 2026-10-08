@@ -142,7 +142,7 @@ cameras:
     ffmpeg:
       inputs:
         - path: rtsp://127.0.0.1:8554/vivint_doorbell_sub?video=copy
-          input_args: preset-rtsp-restream
+          input_args: -avoid_negative_ts make_zero -fflags +genpts+discardcorrupt -use_wallclock_as_timestamps 1 -rtsp_transport tcp -timeout 10000000
           roles:
             - detect
         - path: rtsp://127.0.0.1:8554/vivint_doorbell_main?video=copy
@@ -171,7 +171,7 @@ cameras:
     ffmpeg:
       inputs:
         - path: rtsp://127.0.0.1:8554/vivint_driveway_sub?video=copy
-          input_args: preset-rtsp-restream
+          input_args: -avoid_negative_ts make_zero -fflags +genpts+discardcorrupt -use_wallclock_as_timestamps 1 -rtsp_transport tcp -timeout 10000000
           roles:
             - detect
         - path: rtsp://127.0.0.1:8554/vivint_driveway_main?video=copy
