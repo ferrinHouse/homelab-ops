@@ -44,7 +44,7 @@ spec:
               name: checkmk-secrets
               key: cmk-password
         - name: TZ
-          value: America/New_York
+          value: America/Chicago   # no underscore: image entrypoint seds TZ using "_" as delimiter
         ports:
         - name: http
           containerPort: 5000
