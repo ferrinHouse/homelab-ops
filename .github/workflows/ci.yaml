@@ -112,6 +112,7 @@ jobs:
           kubectl apply -f k8s/configs/cloudflare-ddns.yaml
           kubectl apply -f k8s/configs/familyTravel/familyTravel.yaml
           kubectl apply -f k8s/configs/checkmk.yaml
+          kubectl apply -f k8s/configs/checkmk-backup.yaml
 
       - name: Roll Out Secret Changes
         run: |
