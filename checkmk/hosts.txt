@@ -1,6 +1,6 @@
 # name  ip  agent(yes|no)  -- consumed by add-hosts.sh
 # agent=yes : full Checkmk agent installed (CPU/RAM/disk/services/k3s host)
-# agent=no  : ping/availability only (appliances, IoT, unknown devices)
+# agent=no  : availability only (no agent) (appliances, IoT, unknown devices)
 kubeprime   192.168.1.247  yes
 kube2       192.168.1.248  yes
 yoga-node   192.168.1.249  yes
