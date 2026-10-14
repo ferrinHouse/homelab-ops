@@ -28,6 +28,14 @@ server:
   service:
     servicePort: 80
 
+  # Home Assistant long-lived access token (secret created by ci.yaml from the
+  # HA_PROMETHEUS_TOKEN GitHub secret), read by the 'homeassistant' scrape job below
+  extraSecretMounts:
+    - name: ha-prometheus-token
+      mountPath: /etc/prometheus/secrets/ha
+      secretName: ha-prometheus-token
+      readOnly: true
+
 # Disable Alertmanager to conserve memory (enable if routing alerts via email/webhook)
 alertmanager:
   enabled: false
@@ -67,3 +75,13 @@ extraScrapeConfigs: |
     static_configs:
       - targets: ['192.168.1.249:5000']
 
+  # Home Assistant (HAOS on Raspberry Pi) - entity availability, batteries, updates.
+  # Consumed by Checkmk's Prometheus special agent for the homeassistant host.
+  - job_name: 'homeassistant'
+    metrics_path: '/api/prometheus'
+    scrape_interval: 60s
+    scrape_timeout: 30s
+    authorization:
+      credentials_file: /etc/prometheus/secrets/ha/token
+    static_configs:
+      - targets: ['192.168.1.254:8123']
