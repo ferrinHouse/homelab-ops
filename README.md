@@ -467,3 +467,19 @@ Checkmk Raw (site `homelab`) runs in the `monitoring` namespace, pinned to `yoga
 | Agent receiver | `192.168.1.249:30800` |
 
 Setup helpers live in [`checkmk/`](checkmk/): `hosts.txt` is the monitored-host list, `add-hosts.sh` creates them via the REST API, and `install-agent.sh` installs and registers the agent on a Debian host. Data is stored only on yoga-node's disk, so use a Checkmk backup job if history matters.
+
+### Checkmk backup & restore
+
+A `checkmk-backup` CronJob (03:30 daily, [`k8s/configs/checkmk-backup.yaml`](k8s/configs/checkmk-backup.yaml)) archives the whole site to `checkmk-homelab-<timestamp>.tar.gz` on the OMV NAS, keeping 7 days. Archives land in the dynamic NFS folder `/export/KubernetesLogs/monitoring-checkmk-backups-pvc-*/`.
+
+Run one on demand: `kubectl -n monitoring create job --from=cronjob/checkmk-backup checkmk-backup-manual`
+
+Restore (scale Checkmk down first so nothing writes to the volume):
+
+```bash
+kubectl -n monitoring scale deploy/checkmk --replicas=0
+# extract the chosen archive over the checkmk-data volume on yoga-node, e.g. via a one-off pod
+# mounting checkmk-data + checkmk-backups and running: tar -C /omd/sites -xzf /backup/<file>.tar.gz
+kubectl -n monitoring scale deploy/checkmk --replicas=1
+```
+

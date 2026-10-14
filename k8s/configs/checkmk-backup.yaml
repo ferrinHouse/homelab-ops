@@ -1,0 +1,71 @@
+# Daily backup of the Checkmk site (config, rules, users, RRD history) to the OMV NAS.
+# Source: the checkmk-data local-path volume on yoga-node (mounted read-only).
+# Target: dynamic NFS volume (nfs-client) -> OMV /export/KubernetesLogs/monitoring-checkmk-backups-pvc-*/
+# Restore: see the Checkmk section of README.md.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: checkmk-backups
+  namespace: monitoring
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: checkmk-backup
+  namespace: monitoring
+spec:
+  schedule: "30 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          # checkmk-data is a local-path (RWO) volume that lives on yoga-node
+          nodeSelector:
+            kubernetes.io/hostname: yoga-node
+          containers:
+          - name: backup
+            image: busybox:1.37
+            command:
+            - sh
+            - -c
+            - |
+              set -eu
+              ts=$(date +%Y%m%d-%H%M%S)
+              out=/backup/checkmk-homelab-$ts.tar.gz
+              tar -C /omd/sites --exclude=homelab/tmp -czf "$out.partial" homelab
+              tar -tzf "$out.partial" > /dev/null
+              mv "$out.partial" "$out"
+              find /backup -name 'checkmk-homelab-*.tar.gz' -mtime +7 -delete
+              find /backup -name '*.partial' -mtime +1 -delete
+              ls -lh /backup
+            resources:
+              requests:
+                cpu: 50m
+                memory: 64Mi
+              limits:
+                memory: 256Mi
+            volumeMounts:
+            - name: site
+              mountPath: /omd/sites
+              readOnly: true
+            - name: backup
+              mountPath: /backup
+          volumes:
+          - name: site
+            persistentVolumeClaim:
+              claimName: checkmk-data
+              readOnly: true
+          - name: backup
+            persistentVolumeClaim:
+              claimName: checkmk-backups
