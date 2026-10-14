@@ -454,3 +454,16 @@ it at startup, so after a rotation also run `sudo k3s kubectl rollout restart de
 `cloudflare-secrets`, `travel-secrets`, and `ghcr-secret` currently still need to be created
 out-of-band on the cluster (`kubectl create secret ...`) since CI doesn't manage them yet — folding
 them into the same CI-managed pattern above is a good follow-up.
+
+---
+
+## 🩺 Checkmk Monitoring
+
+Checkmk Raw (site `homelab`) runs in the `monitoring` namespace, pinned to `yoga-node` with a 20 Gi `local-path` volume. Manifest: [`k8s/configs/checkmk.yaml`](k8s/configs/checkmk.yaml).
+
+| Endpoint | Address |
+| :--- | :--- |
+| Web UI | `http://192.168.1.249:30500/homelab/` (user `cmkadmin`, password from the `CHECKMK_PASSWORD` GitHub secret) |
+| Agent receiver | `192.168.1.249:30800` |
+
+Setup helpers live in [`checkmk/`](checkmk/): `hosts.txt` is the monitored-host list, `add-hosts.sh` creates them via the REST API, and `install-agent.sh` installs and registers the agent on a Debian host. Data is stored only on yoga-node's disk, so use a Checkmk backup job if history matters.
