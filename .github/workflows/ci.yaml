@@ -39,6 +39,14 @@ jobs:
             --namespace monitoring --create-namespace \
             -f k8s/monitoring/values-loki.yaml
 
+      - name: Create Prometheus scrape secrets
+        run: |
+          kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret generic ha-prometheus-token \
+            --namespace monitoring \
+            --from-literal=token="${{ secrets.HA_PROMETHEUS_TOKEN }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Deploy Prometheus
         run: |
           helm upgrade --install prometheus prometheus-community/prometheus \
