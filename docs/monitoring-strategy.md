@@ -141,7 +141,7 @@ production to test it. Node-down relies on host DOWN, which Checkmk reports afte
   single-valued in Raw, so Frigate has no host-level link from `yoga-node`.
 
 **Phase 3: unified "Homelab Overview" dashboard**
-- **Built (PR pending, deploys on merge):** Checkmk data via the Grafana **Infinity** datasource
+- **Built, deployed and verified 2026-10-15 (PR #23):** Checkmk data via the Grafana **Infinity** datasource
   (`yesoreyeram-infinity-datasource` 4.1.0, uid `checkmk-infinity`) calling the in-cluster Checkmk REST API with the
   read-only `grafana_ro` (guest) user. Secret flow: GitHub secret `CHECKMK_GRAFANA_SECRET` -> k8s Secret
   `checkmk-grafana` (key `bearer` = `grafana_ro <secret>`, created by `ci.yaml` before the Grafana upgrade) ->
@@ -233,7 +233,8 @@ The TL-SG108E switch (`192.168.8.177`) has no SSH; web UI only.
 - [x] Phase 1: NPM / HA / router / NAS-NFS / node-down checks and notifications (2026-10-15).
 - [ ] Phase 2: merge PR #21 (Grafana dashboard links; deploys Grafana provisioning). Checkmk side is done.
 - [ ] Consider a second paging path for a total-LAN/cluster failure (see Phase 4); Checkmk runs on yoga-node.
-- [ ] Phase 3: merge the overview-dashboard PR, then verify the Checkmk datasource and panels in the live Grafana.
+- [x] Phase 3: Homelab Overview deployed; all nine data panels return data through `grafana_ro` (8 top-5 checks, 6 hosts, 0 problems). Verified via `POST /api/ds/query`.
+- [ ] Phase 3 follow-up: add omv-nas / gateway / homeassistant panels (disk, WAN throughput) and a screenshot-level visual review in the UI.
 - [ ] Disable SSH password auth on the gateway.
 - [ ] Remove stale `24.220.158.77` from `~/.ssh/known_hosts`.
 - [ ] Optional: remove `CMK_SECRET` from `~/.bash_profile` and use the Bitwarden CLI instead.
