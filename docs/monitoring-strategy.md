@@ -22,8 +22,8 @@ long Claude Code session; kept here so future sessions (human or Claude) can pic
 | Monitored hosts | kubeprime, kube2, yoga-node, omv-nas, homeassistant (agent); gateway (SNMP-style, no agent). Source list: [`checkmk/hosts.txt`](../checkmk/hosts.txt) |
 | Backup | `checkmk-backup` CronJob, 03:30 daily to the NAS (see README) |
 
-Baseline after the 2026-10-14 cleanup: **0 CRIT**, 3 WARN (Check_MK Discovery: stale `df`/`nfsmounts` from pod
-mounts on the k3s nodes), 18 UNKNOWN (14 vanished k3s mounts, 4 removed gateway interfaces 11/12/16/17).
+Baseline after Phase 0 (2026-10-15): **125 services, all OK** (was 231 with 3 WARN / 18 UNKNOWN before the
+cleanup). Email notifications deliver (see §3a).
 
 ### Grafana stack (see [`k8s/monitoring/`](../k8s/monitoring/))
 - **Prometheus** scrapes k8s (api-servers, nodes, cAdvisor, pods, services) plus `frigate` (`192.168.1.249:5000`)
@@ -39,6 +39,9 @@ mounts on the k3s nodes), 18 UNKNOWN (14 vanished k3s mounts, 4 removed gateway 
 | Disabled services: `gateway` / `Filesystem /rom`, `Interface 31`, `Interface 26` | silenced | `/rom` is read-only squashfs (always 100%); 31/26 are unused/virtual wifi netdevs |
 | `memory_linux`: `yoga-node` committed memory warn **250%** / crit **300%** | thresholds raised | k3s overcommit; real usage ~57% |
 | `interfaces`: `gateway` items `09$`, `22$`, `23$`, error levels `{"both": ("perc", (100.0, 100.0))}` | effectively off | wifi radio "input errors" are RF noise (see §5). Up/down still monitored |
+| Disabled services: `kubeprime`, `kube2`, `yoga-node` / `NFS mount` and `Filesystem` under `/var/lib/kubelet/pods/`, `/run/k3s/containerd/`, `/run/containerd/`, `/var/lib/rancher/k3s/` | silenced | Per-pod mounts and container rootfs churn on every pod restart. **NAS/NFS health must therefore be checked directly** (omv-nas host, TCP 2049, `/export` disk), not via node mounts |
+| `inventory_if_rules`: `gateway` discover by name (`item_appearance: descr`), only `eth0`, `eth1`, `br-lan`, `lan2`, `lan3`, `lan5` | stable item names | The router's ifIndex numbers shift between scans, which produced "Item not found" UNKNOWNs |
+| Disabled services: `gateway` / `Interface [0-9]+$` | silenced | Index-numbered leftovers (wifi netdevs, `br-iot`). Unused ports `lan1`/`lan4` (no link) are not discovered |
 
 ---
 
@@ -82,14 +85,35 @@ use Grafana to *visualise* it.
 Blind spot: these checks run from **inside** the LAN, so they say nothing about whether the public hostnames
 work from outside (Cloudflare → router → NPM).
 
+### 3a. Email delivery (verified 2026-10-15)
+
+| | |
+|---|---|
+| Recipient | `cmkadmin` contact email `mike.ferrin.84+homelab-alerts@gmail.com` |
+| Rule | Stock "HTML email to all contacts about service/host status changes", contact selection **all users with an email address** (the default "contacts of the notified object" matched nobody: no host has contacts) |
+| Transport | Native SMTP in the `mail` plugin: `smtp.gmail.com:587`, STARTTLS, auth user `mike.ferrin.84@gmail.com`, app password in the Checkmk **password store** (`gmail_smtp`) |
+| Test | `SEND_CUSTOM_HOST_NOTIFICATION;<host>;0;<author>;<comment>` via `unixcat ~/tmp/run/live`, then `~/var/log/notify.log`: `success 250 ... gsmtp` |
+
+**Gotchas**
+- Raw has **no UI for SMTP**; the option only exists in the REST API (`enable_sync_smtp` in the rule's plugin
+  params), and the API only accepts the password as a **plain string**, not a store reference. The 2.4 mail plugin
+  then crashes with `list index out of range`.
+- Fix used: set the rule via the API (auth disabled or a temporary string), then rewrite the stored password in
+  `~/etc/check_mk/conf.d/wato/notification_parameter.mk` inside the pod to
+  `('cmk_postprocessed', 'stored_password', ('gmail_smtp', ''))`. This also removes the plaintext password
+  from disk. **Do not re-save that parameter set through the API** or the plain string comes back.
+- The global fallback address (`mike.ferrin.84+cmk@gmail.com`) uses local `asciimail`/postfix, which has no
+  transport and silently drops mail. It only fires when no rule matches.
+- Passwords entered in the UI are not "activated" until you press Activate changes.
+
 ---
 
 ## 4. Phased plan
 
 **Phase 0: clean baseline**
-- Rediscover services on kubeprime, kube2, yoga-node, gateway to clear WARN/UNKNOWN.
-- Add a rule excluding pod mounts (`/var/lib/kubelet/pods/...`, `/run/k3s/...`) from `df`/`nfsmounts` discovery.
-- **Verify Checkmk email notifications are configured and actually deliver** (not yet checked).
+- ~~Rediscover services on kubeprime, kube2, yoga-node, gateway to clear WARN/UNKNOWN.~~ Done 2026-10-15.
+- ~~Add a rule excluding pod mounts from `df`/`nfsmounts` discovery.~~ Done (see §1).
+- ~~Verify Checkmk email notifications deliver.~~ Done (§3a); Gmail accepted the test (`250 2.0.0 OK`).
 
 **Phase 1: top-5 alerts in Checkmk** (§3 table), with email notifications.
 
@@ -176,7 +200,9 @@ The TL-SG108E switch (`192.168.8.177`) has no SSH; web UI only.
 
 ## 8. Open items
 
-- [ ] Phase 0: rediscovery + pod-mount exclusion rule; verify Checkmk email notifications.
+- [x] Phase 0: rediscovery, pod-mount exclusion, email delivery (2026-10-15).
+- [ ] Remove the leftover plaintext-password helper script (`~/set-smtp-auth.sh`) if it still exists.
+- [ ] Clean up the global fallback notification address (local postfix drops mail).
 - [ ] Phase 1: NPM / HA / router / NAS-NFS / node-down checks and notifications.
 - [ ] Phase 3: unified overview dashboard (needs the Checkmk-to-Grafana data path decision).
 - [ ] Disable SSH password auth on the gateway.
