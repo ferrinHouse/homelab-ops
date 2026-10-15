@@ -39,6 +39,15 @@ copy is the source of truth and a record; a human has to install it on the node 
 README runbook give the command). If you change one, say so plainly rather than implying it is live. The files
 are pinned to LF line endings in `.gitattributes` because a CRLF shebang breaks them on Linux.
 
+## Monitoring strategy (Grafana + Checkmk)
+
+[`docs/monitoring-strategy.md`](docs/monitoring-strategy.md) is the working record for how Grafana and Checkmk
+split monitoring duties: current Checkmk setup and the rules created in it, the phased plan, the agreed
+decisions (email only, unified overview dashboard, top alerts), gateway/wifi findings, SSH aliases, and
+Checkmk REST API gotchas. Read it before touching monitoring or Checkmk, and update its "Open items" as work
+lands. The Checkmk site is configured through its UI/API, so its rules are **not** in this repo; that doc is
+the only record of them.
+
 ## Alloy log pipeline (`k8s/monitoring/config.alloy`)
 
 The `config.alloy` file defines Grafana Alloy's log-processing pipeline and has a non-obvious constraint:
