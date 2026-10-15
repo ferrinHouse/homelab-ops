@@ -22,7 +22,7 @@ long Claude Code session; kept here so future sessions (human or Claude) can pic
 | Monitored hosts | kubeprime, kube2, yoga-node, omv-nas, homeassistant (agent); gateway (SNMP-style, no agent). Source list: [`checkmk/hosts.txt`](../checkmk/hosts.txt) |
 | Backup | `checkmk-backup` CronJob, 03:30 daily to the NAS (see README) |
 
-Baseline after Phase 0 (2026-10-15): **125 services, all OK** (was 231 with 3 WARN / 18 UNKNOWN before the
+Baseline after Phase 1 (2026-10-15): **132 services, all OK** (was 231 with 3 WARN / 18 UNKNOWN before the
 cleanup). Email notifications deliver (see §3a).
 
 ### Grafana stack (see [`k8s/monitoring/`](../k8s/monitoring/))
@@ -41,6 +41,11 @@ cleanup). Email notifications deliver (see §3a).
 | `interfaces`: `gateway` items `09$`, `22$`, `23$`, error levels `{"both": ("perc", (100.0, 100.0))}` | effectively off | wifi radio "input errors" are RF noise (see §5). Up/down still monitored |
 | Disabled services: `kubeprime`, `kube2`, `yoga-node` / `NFS mount` and `Filesystem` under `/var/lib/kubelet/pods/`, `/run/k3s/containerd/`, `/run/containerd/`, `/var/lib/rancher/k3s/` | silenced | Per-pod mounts and container rootfs churn on every pod restart. **NAS/NFS health must therefore be checked directly** (omv-nas host, TCP 2049, `/export` disk), not via node mounts |
 | `inventory_if_rules`: `gateway` discover by name (`item_appearance: descr`), only `eth0`, `eth1`, `br-lan`, `lan2`, `lan3`, `lan5` | stable item names | The router's ifIndex numbers shift between scans, which produced "Item not found" UNKNOWNs |
+| `active_checks:httpv2` on `kube2`: `NPM proxy HTTP :80` (`:30774`), `NPM proxy HTTPS :443` (`https://cmk.ferrinhouse.org:32316/` via server `192.168.1.248`, expects 200/401/403, no cert validation), `NPM admin UI` (`:30943`) | **pages** | Phase 1, NPM down |
+| `active_checks:httpv2` on `homeassistant`: `Home Assistant UI` (`http://192.168.1.254:8123/`, expects 200) | **pages** | Phase 1, HA down |
+| `active_checks:tcp` on `omv-nas`: `NFS server port 2049` | **pages** | Phase 1, NAS/NFS down |
+| `active_checks:icmp` on `gateway`: `Internet ping 1.1.1.1`, `Internet ping 8.8.8.8` (`address: ("explicit", ip)`) | **pages** | Phase 1, router/internet |
+| Notification rule (stock mail rule, edited): host down + service CRIT only for `^NPM `, `^Home Assistant UI`, `^Internet ping`, `^NFS server port`, `^Interface eth1$` | paging scope | Everything else is dashboard-only, per the top-5 decision |
 | Disabled services: `gateway` / `Interface [0-9]+$` | silenced | Index-numbered leftovers (wifi netdevs, `br-iot`). Unused ports `lan1`/`lan4` (no link) are not discovered |
 
 ---
@@ -105,6 +110,12 @@ work from outside (Cloudflare → router → NPM).
 - The global fallback address (`mike.ferrin.84+cmk@gmail.com`) uses local `asciimail`/postfix, which has no
   transport and silently drops mail. It only fires when no rule matches.
 - Passwords entered in the UI are not "activated" until you press Activate changes.
+- **Any API `PUT` of the mail notification rule re-breaks the credential**: the API creates a new parameter set
+  and stringifies the reference to `"['cmk_postprocessed', 'stored_password', ['gmail_smtp', '']]"`. After
+  such an edit, re-run the on-disk fix (replace that string with the tuple above) and send a test. Hit once
+  on 2026-10-15 when scoping the rule to the top-5; prefer a UI edit if the rule must change.
+- Paging test: `SEND_CUSTOM_SVC_NOTIFICATION;kube2;NPM proxy HTTP :80;0;<author>;<comment>`. A service outside
+  the top-5 (e.g. `Uptime`) logs "does not match by the list of allowed services".
 
 ---
 
@@ -115,7 +126,9 @@ work from outside (Cloudflare → router → NPM).
 - ~~Add a rule excluding pod mounts from `df`/`nfsmounts` discovery.~~ Done (see §1).
 - ~~Verify Checkmk email notifications deliver.~~ Done (§3a); Gmail accepted the test (`250 2.0.0 OK`).
 
-**Phase 1: top-5 alerts in Checkmk** (§3 table), with email notifications.
+**Phase 1: top-5 alerts in Checkmk** (§3 table), with email notifications. **Done 2026-10-15** (checks and
+paging scope in §1; verified by a custom notification). Not yet exercised with a real outage; do not break
+production to test it. Node-down relies on host DOWN, which Checkmk reports after the check retries.
 
 **Phase 2: cross-links**
 - Checkmk "Notes URL" rule linking hosts/services to the matching Grafana dashboard / Loki query.
@@ -203,7 +216,9 @@ The TL-SG108E switch (`192.168.8.177`) has no SSH; web UI only.
 - [x] Phase 0: rediscovery, pod-mount exclusion, email delivery (2026-10-15).
 - [ ] Remove the leftover plaintext-password helper script (`~/set-smtp-auth.sh`) if it still exists.
 - [ ] Clean up the global fallback notification address (local postfix drops mail).
-- [ ] Phase 1: NPM / HA / router / NAS-NFS / node-down checks and notifications.
+- [x] Phase 1: NPM / HA / router / NAS-NFS / node-down checks and notifications (2026-10-15).
+- [ ] Phase 2: Notes URL cross-links Checkmk <-> Grafana.
+- [ ] Consider a second paging path for a total-LAN/cluster failure (see Phase 4); Checkmk runs on yoga-node.
 - [ ] Phase 3: unified overview dashboard (needs the Checkmk-to-Grafana data path decision).
 - [ ] Disable SSH password auth on the gateway.
 - [ ] Remove stale `24.220.158.77` from `~/.ssh/known_hosts`.
