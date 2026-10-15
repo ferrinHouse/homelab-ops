@@ -72,8 +72,9 @@ out of labels to avoid blowing up stream cardinality.
 
 ## Grafana dashboards (`k8s/monitoring/dashboards/*.json`)
 
-Dashboard JSON files are hand-authored/exported Grafana dashboard definitions, provisioned via
-`values-grafana.yaml`. When editing panels, check `config.alloy` for which `level` values and labels are
+Dashboard JSON files are hand-authored/exported Grafana dashboard definitions. Only
+`homelab-overview.json` is provisioned (ConfigMap `homelab-dashboards`, built by `ci.yaml`, mounted via
+`values-grafana.yaml`); the others were imported by hand and the repo copies are a record. When editing panels, check `config.alloy` for which `level` values and labels are
 actually available for the namespace/container you're querying — a panel filtering on a label that Alloy
 never emits for that tier will silently return no data rather than erroring.
 

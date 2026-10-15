@@ -1,0 +1,1042 @@
+{
+  "uid": "homelab-overview",
+  "title": "Homelab Overview",
+  "tags": [
+    "homelab",
+    "checkmk"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "editable": true,
+  "graphTooltip": 0,
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "CRIT services",
+      "description": "Checkmk services in CRIT",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "checkmk-infinity"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "checkmk-infinity"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://checkmk.monitoring.svc.cluster.local:5000/homelab/check_mk/api/1.0/domain-types/service/collections/all",
+          "root_selector": "value",
+          "url_options": {
+            "method": "GET",
+            "params": [
+              {
+                "key": "columns",
+                "value": "state"
+              },
+              {
+                "key": "query",
+                "value": "{\"op\":\"=\",\"left\":\"state\",\"right\":\"2\"}"
+              }
+            ],
+            "headers": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "columns": [
+            {
+              "selector": "extensions.state",
+              "text": "state",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "links": [
+            {
+              "title": "Open in Checkmk",
+              "url": "https://cmk.ferrinhouse.org/homelab/check_mk/index.py?start_url=view.py%3Fview_name%3Dsvcproblems",
+              "targetBlank": true
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "count"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "WARN services",
+      "description": "Checkmk services in WARN",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "checkmk-infinity"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "checkmk-infinity"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://checkmk.monitoring.svc.cluster.local:5000/homelab/check_mk/api/1.0/domain-types/service/collections/all",
+          "root_selector": "value",
+          "url_options": {
+            "method": "GET",
+            "params": [
+              {
+                "key": "columns",
+                "value": "state"
+              },
+              {
+                "key": "query",
+                "value": "{\"op\":\"=\",\"left\":\"state\",\"right\":\"1\"}"
+              }
+            ],
+            "headers": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "columns": [
+            {
+              "selector": "extensions.state",
+              "text": "state",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              }
+            ]
+          },
+          "links": [
+            {
+              "title": "Open in Checkmk",
+              "url": "https://cmk.ferrinhouse.org/homelab/check_mk/index.py?start_url=view.py%3Fview_name%3Dsvcproblems",
+              "targetBlank": true
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "count"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "UNKNOWN services",
+      "description": "Checkmk services in UNKNOWN",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "checkmk-infinity"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "checkmk-infinity"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://checkmk.monitoring.svc.cluster.local:5000/homelab/check_mk/api/1.0/domain-types/service/collections/all",
+          "root_selector": "value",
+          "url_options": {
+            "method": "GET",
+            "params": [
+              {
+                "key": "columns",
+                "value": "state"
+              },
+              {
+                "key": "query",
+                "value": "{\"op\":\"=\",\"left\":\"state\",\"right\":\"3\"}"
+              }
+            ],
+            "headers": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "columns": [
+            {
+              "selector": "extensions.state",
+              "text": "state",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          },
+          "links": [
+            {
+              "title": "Open in Checkmk",
+              "url": "https://cmk.ferrinhouse.org/homelab/check_mk/index.py?start_url=view.py%3Fview_name%3Dsvcproblems",
+              "targetBlank": true
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "count"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Hosts not UP",
+      "description": "Checkmk hosts DOWN or UNREACHABLE",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "checkmk-infinity"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "checkmk-infinity"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://checkmk.monitoring.svc.cluster.local:5000/homelab/check_mk/api/1.0/domain-types/host/collections/all",
+          "root_selector": "value",
+          "url_options": {
+            "method": "GET",
+            "params": [
+              {
+                "key": "columns",
+                "value": "state"
+              },
+              {
+                "key": "query",
+                "value": "{\"op\":\"!=\",\"left\":\"state\",\"right\":\"0\"}"
+              }
+            ],
+            "headers": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "columns": [
+            {
+              "selector": "extensions.state",
+              "text": "state",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "links": [
+            {
+              "title": "Open in Checkmk",
+              "url": "https://cmk.ferrinhouse.org/homelab/check_mk/index.py?start_url=view.py%3Fview_name%3Dsvcproblems",
+              "targetBlank": true
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "count"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Prometheus targets down",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "count(up == 0) or vector(0)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Log errors (15m)",
+      "datasource": {
+        "type": "loki",
+        "uid": "P8E80F9AEF21F6940"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "P8E80F9AEF21F6940"
+          },
+          "expr": "sum(count_over_time({level=\"error\"}[15m])) or vector(0)",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 20
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area"
+      }
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Top-5 paging checks",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "checkmk-infinity"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "checkmk-infinity"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://checkmk.monitoring.svc.cluster.local:5000/homelab/check_mk/api/1.0/domain-types/service/collections/all",
+          "root_selector": "value",
+          "url_options": {
+            "method": "GET",
+            "params": [
+              {
+                "key": "columns",
+                "value": "host_name"
+              },
+              {
+                "key": "columns",
+                "value": "description"
+              },
+              {
+                "key": "columns",
+                "value": "state"
+              },
+              {
+                "key": "columns",
+                "value": "plugin_output"
+              },
+              {
+                "key": "query",
+                "value": "{\"op\":\"or\",\"expr\":[{\"op\":\"~\",\"left\":\"description\",\"right\":\"^NPM \"},{\"op\":\"~\",\"left\":\"description\",\"right\":\"^Home Assistant UI\"},{\"op\":\"~\",\"left\":\"description\",\"right\":\"^Internet ping\"},{\"op\":\"~\",\"left\":\"description\",\"right\":\"^NFS server port\"},{\"op\":\"=\",\"left\":\"description\",\"right\":\"Interface eth1\"}]}"
+              }
+            ],
+            "headers": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "columns": [
+            {
+              "selector": "extensions.host_name",
+              "text": "Host",
+              "type": "string"
+            },
+            {
+              "selector": "extensions.description",
+              "text": "Check",
+              "type": "string"
+            },
+            {
+              "selector": "extensions.state",
+              "text": "State",
+              "type": "number"
+            },
+            {
+              "selector": "extensions.plugin_output",
+              "text": "Output",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "links": [
+            {
+              "title": "Open in Checkmk",
+              "url": "https://cmk.ferrinhouse.org/homelab/check_mk/index.py?start_url=view.py%3Fview_name%3Dsvcproblems",
+              "targetBlank": true
+            }
+          ]
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "State"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "OK",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "WARN",
+                        "color": "yellow",
+                        "index": 1
+                      },
+                      "2": {
+                        "text": "CRIT",
+                        "color": "red",
+                        "index": 2
+                      },
+                      "3": {
+                        "text": "UNKNOWN",
+                        "color": "orange",
+                        "index": 3
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 1
+                    },
+                    {
+                      "color": "red",
+                      "value": 2
+                    },
+                    {
+                      "color": "orange",
+                      "value": 3
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "Hosts",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "checkmk-infinity"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "checkmk-infinity"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://checkmk.monitoring.svc.cluster.local:5000/homelab/check_mk/api/1.0/domain-types/host/collections/all",
+          "root_selector": "value",
+          "url_options": {
+            "method": "GET",
+            "params": [
+              {
+                "key": "columns",
+                "value": "name"
+              },
+              {
+                "key": "columns",
+                "value": "state"
+              },
+              {
+                "key": "columns",
+                "value": "address"
+              }
+            ],
+            "headers": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "columns": [
+            {
+              "selector": "extensions.name",
+              "text": "Host",
+              "type": "string"
+            },
+            {
+              "selector": "extensions.state",
+              "text": "State",
+              "type": "number"
+            },
+            {
+              "selector": "extensions.address",
+              "text": "Address",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "links": [
+            {
+              "title": "Open in Checkmk",
+              "url": "https://cmk.ferrinhouse.org/homelab/check_mk/index.py?start_url=view.py%3Fview_name%3Dallhosts",
+              "targetBlank": true
+            }
+          ]
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "State"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "UP",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "DOWN",
+                        "color": "red",
+                        "index": 1
+                      },
+                      "2": {
+                        "text": "UNREACHABLE",
+                        "color": "orange",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 1
+                    },
+                    {
+                      "color": "red",
+                      "value": 2
+                    },
+                    {
+                      "color": "orange",
+                      "value": 3
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "Problems (not OK)",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "checkmk-infinity"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "checkmk-infinity"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://checkmk.monitoring.svc.cluster.local:5000/homelab/check_mk/api/1.0/domain-types/service/collections/all",
+          "root_selector": "value",
+          "url_options": {
+            "method": "GET",
+            "params": [
+              {
+                "key": "columns",
+                "value": "host_name"
+              },
+              {
+                "key": "columns",
+                "value": "description"
+              },
+              {
+                "key": "columns",
+                "value": "state"
+              },
+              {
+                "key": "columns",
+                "value": "plugin_output"
+              },
+              {
+                "key": "query",
+                "value": "{\"op\":\"!=\",\"left\":\"state\",\"right\":\"0\"}"
+              }
+            ],
+            "headers": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "columns": [
+            {
+              "selector": "extensions.host_name",
+              "text": "Host",
+              "type": "string"
+            },
+            {
+              "selector": "extensions.description",
+              "text": "Service",
+              "type": "string"
+            },
+            {
+              "selector": "extensions.state",
+              "text": "State",
+              "type": "number"
+            },
+            {
+              "selector": "extensions.plugin_output",
+              "text": "Output",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "links": [
+            {
+              "title": "Open in Checkmk",
+              "url": "https://cmk.ferrinhouse.org/homelab/check_mk/index.py?start_url=view.py%3Fview_name%3Dsvcproblems",
+              "targetBlank": true
+            }
+          ]
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "State"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "OK",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "WARN",
+                        "color": "yellow",
+                        "index": 1
+                      },
+                      "2": {
+                        "text": "CRIT",
+                        "color": "red",
+                        "index": 2
+                      },
+                      "3": {
+                        "text": "UNKNOWN",
+                        "color": "orange",
+                        "index": 3
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 1
+                    },
+                    {
+                      "color": "red",
+                      "value": 2
+                    },
+                    {
+                      "color": "orange",
+                      "value": 3
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "id": 10,
+      "type": "text",
+      "title": "Jump to",
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Checkmk:** [problems](https://cmk.ferrinhouse.org/homelab/check_mk/index.py?start_url=view.py%3Fview_name%3Dsvcproblems) · [hosts](https://cmk.ferrinhouse.org/homelab/check_mk/index.py?start_url=view.py%3Fview_name%3Dallhosts) &nbsp;|&nbsp; **Grafana:** [Pods & containers](/d/k8s-pod-monitor) · [Golden signals](/d/k8s-pod-golden-signals-kiosk) · [Frigate](/d/frigate-nvr-overview) · [Node exporter](/d/rYdddlPWk) &nbsp;|&nbsp; **Logs:** [Loki explore](/explore?left=%7B%22datasource%22:%22P8E80F9AEF21F6940%22%7D)"
+      }
+    }
+  ],
+  "links": [
+    {
+      "title": "Checkmk",
+      "type": "link",
+      "icon": "external link",
+      "url": "https://cmk.ferrinhouse.org/homelab/check_mk/index.py?start_url=view.py%3Fview_name%3Dsvcproblems",
+      "targetBlank": true
+    }
+  ]
+}
