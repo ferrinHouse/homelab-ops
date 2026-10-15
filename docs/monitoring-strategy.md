@@ -45,6 +45,8 @@ cleanup). Email notifications deliver (see §3a).
 | `active_checks:httpv2` on `homeassistant`: `Home Assistant UI` (`http://192.168.1.254:8123/`, expects 200) | **pages** | Phase 1, HA down |
 | `active_checks:tcp` on `omv-nas`: `NFS server port 2049` | **pages** | Phase 1, NAS/NFS down |
 | `active_checks:icmp` on `gateway`: `Internet ping 1.1.1.1`, `Internet ping 8.8.8.8` (`address: ("explicit", ip)`) | **pages** | Phase 1, router/internet |
+| `extra_host_conf:notes_url` on `kubeprime`, `kube2`, `yoga-node` | link | Phase 2: Checkmk host page -> Grafana *Node Exporter Full* (`rYdddlPWk`, `var-node=$HOSTADDRESS$:9100`) |
+| `extra_service_conf:notes_url` on `kube2` services `^NPM ` | link | Phase 2: -> Grafana *Pods & Containers Deep Dive* (`var-namespace=default&var-container=npm`, metrics and Loki logs) |
 | Notification rule (stock mail rule, edited): host down + service CRIT only for `^NPM `, `^Home Assistant UI`, `^Internet ping`, `^NFS server port`, `^Interface eth1$` | paging scope | Everything else is dashboard-only, per the top-5 decision |
 | Disabled services: `gateway` / `Interface [0-9]+$` | silenced | Index-numbered leftovers (wifi netdevs, `br-iot`). Unused ports `lan1`/`lan4` (no link) are not discovered |
 
@@ -130,9 +132,13 @@ work from outside (Cloudflare → router → NPM).
 paging scope in §1; verified by a custom notification). Not yet exercised with a real outage; do not break
 production to test it. Node-down relies on host DOWN, which Checkmk reports after the check retries.
 
-**Phase 2: cross-links**
-- Checkmk "Notes URL" rule linking hosts/services to the matching Grafana dashboard / Loki query.
-- Grafana dashboard links back to the Checkmk host page.
+**Phase 2: cross-links** (Checkmk -> Grafana done 2026-10-15; Grafana -> Checkmk is PR #21, deploys on merge)
+- Checkmk "Notes URL" rules (see §1) link the three k3s nodes and the NPM services to Grafana. The public
+  Grafana URL is `https://grafana.ferrinhouse.org`. omv-nas, gateway and homeassistant have no useful Grafana
+  dashboard yet, so they have no link; add them with the Phase 3 overview.
+- The three repo dashboards get two links each (Checkmk problems view, all-hosts view). The imported
+  community dashboards (Node Exporter Full etc.) are not in the repo and are left alone. Notes URLs are
+  single-valued in Raw, so Frigate has no host-level link from `yoga-node`.
 
 **Phase 3: unified "Homelab Overview" dashboard**
 - Add Checkmk state to Grafana. The official Checkmk data source plugin, as far as we know, needs a commercial
@@ -217,7 +223,7 @@ The TL-SG108E switch (`192.168.8.177`) has no SSH; web UI only.
 - [ ] Remove the leftover plaintext-password helper script (`~/set-smtp-auth.sh`) if it still exists.
 - [ ] Clean up the global fallback notification address (local postfix drops mail).
 - [x] Phase 1: NPM / HA / router / NAS-NFS / node-down checks and notifications (2026-10-15).
-- [ ] Phase 2: Notes URL cross-links Checkmk <-> Grafana.
+- [ ] Phase 2: merge PR #21 (Grafana dashboard links; deploys Grafana provisioning). Checkmk side is done.
 - [ ] Consider a second paging path for a total-LAN/cluster failure (see Phase 4); Checkmk runs on yoga-node.
 - [ ] Phase 3: unified overview dashboard (needs the Checkmk-to-Grafana data path decision).
 - [ ] Disable SSH password auth on the gateway.
