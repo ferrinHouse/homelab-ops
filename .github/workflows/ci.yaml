@@ -64,6 +64,21 @@ jobs:
             --from-literal=password="${{ secrets.MEALIE_SMTP_PASSWORD }}" \
             --dry-run=client -o yaml | kubectl apply -f -
 
+      # Must run BEFORE the Grafana upgrade: values-grafana.yaml injects CHECKMK_GRAFANA_BEARER from
+      # this Secret (the pod cannot start without it) and mounts the dashboard ConfigMap.
+      # Checkmk expects "Authorization: Bearer <user> <secret>", so the user is part of the value.
+      - name: Create Grafana Checkmk Secret and dashboards ConfigMap
+        run: |
+          kubectl create secret generic checkmk-grafana \
+            --namespace monitoring \
+            --from-literal=bearer="grafana_ro ${{ secrets.CHECKMK_GRAFANA_SECRET }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl create configmap homelab-dashboards \
+            --namespace monitoring \
+            --from-file=homelab-overview.json=k8s/monitoring/dashboards/homelab-overview.json \
+            --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Deploy Grafana
         run: |
           helm upgrade --install grafana grafana/grafana \

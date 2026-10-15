@@ -141,6 +141,14 @@ production to test it. Node-down relies on host DOWN, which Checkmk reports afte
   single-valued in Raw, so Frigate has no host-level link from `yoga-node`.
 
 **Phase 3: unified "Homelab Overview" dashboard**
+- **Built (PR pending, deploys on merge):** Checkmk data via the Grafana **Infinity** datasource
+  (`yesoreyeram-infinity-datasource` 4.1.0, uid `checkmk-infinity`) calling the in-cluster Checkmk REST API with the
+  read-only `grafana_ro` (guest) user. Secret flow: GitHub secret `CHECKMK_GRAFANA_SECRET` -> k8s Secret
+  `checkmk-grafana` (key `bearer` = `grafana_ro <secret>`, created by `ci.yaml` before the Grafana upgrade) ->
+  env `CHECKMK_GRAFANA_BEARER` -> datasource `secureJsonData`. Dashboard `homelab-overview` is **provisioned**
+  from ConfigMap `homelab-dashboards` (built by CI from `k8s/monitoring/dashboards/homelab-overview.json`).
+- The other three JSON files in `k8s/monitoring/dashboards/` are **not** provisioned (imported by hand; the
+  repo copies are a record). Editing them in the repo does not change the running Grafana.
 - Add Checkmk state to Grafana. The official Checkmk data source plugin, as far as we know, needs a commercial
   edition; **verify against Raw before ruling out**. Raw workarounds: Grafana **Infinity** data source on the REST API
   (current problems table), or a small community exporter publishing states to Prometheus.
@@ -225,7 +233,7 @@ The TL-SG108E switch (`192.168.8.177`) has no SSH; web UI only.
 - [x] Phase 1: NPM / HA / router / NAS-NFS / node-down checks and notifications (2026-10-15).
 - [ ] Phase 2: merge PR #21 (Grafana dashboard links; deploys Grafana provisioning). Checkmk side is done.
 - [ ] Consider a second paging path for a total-LAN/cluster failure (see Phase 4); Checkmk runs on yoga-node.
-- [ ] Phase 3: unified overview dashboard (needs the Checkmk-to-Grafana data path decision).
+- [ ] Phase 3: merge the overview-dashboard PR, then verify the Checkmk datasource and panels in the live Grafana.
 - [ ] Disable SSH password auth on the gateway.
 - [ ] Remove stale `24.220.158.77` from `~/.ssh/known_hosts`.
 - [ ] Optional: remove `CMK_SECRET` from `~/.bash_profile` and use the Bitwarden CLI instead.

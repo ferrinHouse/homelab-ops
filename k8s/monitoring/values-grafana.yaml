@@ -22,6 +22,50 @@ datasources:
         url: http://prometheus-server.monitoring.svc.cluster.local
         access: proxy
         isDefault: false
+      # Checkmk (Raw) has no Grafana plugin, so its REST API is read via Infinity. Queries use the
+      # in-cluster service; allowedHosts restricts what the datasource may call.
+      - name: Checkmk
+        uid: checkmk-infinity
+        type: yesoreyeram-infinity-datasource
+        access: proxy
+        isDefault: false
+        jsonData:
+          auth_method: bearerToken
+          allowedHosts:
+            - http://checkmk.monitoring.svc.cluster.local:5000
+        secureJsonData:
+          bearerToken: "$CHECKMK_GRAFANA_BEARER"
+
+# Infinity datasource: queries the Checkmk REST API for the Homelab Overview dashboard.
+# Pinned to an exact release, installed from grafana.com at pod start (needs outbound internet).
+plugins:
+  - https://grafana.com/api/plugins/yesoreyeram-infinity-datasource/versions/4.1.0/download;yesoreyeram-infinity-datasource
+
+# CHECKMK_GRAFANA_BEARER ("grafana_ro <automation secret>") comes from the checkmk-grafana Secret,
+# which ci.yaml creates BEFORE the Grafana Helm upgrade. grafana_ro is a read-only (guest) Checkmk user.
+envValueFrom:
+  CHECKMK_GRAFANA_BEARER:
+    secretKeyRef:
+      name: checkmk-grafana
+      key: bearer
+
+# The Homelab Overview dashboard is provisioned from a ConfigMap that ci.yaml builds from
+# k8s/monitoring/dashboards/homelab-overview.json. The other JSON files in that directory are NOT
+# provisioned: they were imported by hand and are kept there as a record only.
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: homelab
+        orgId: 1
+        folder: Homelab
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/homelab
+dashboardsConfigMaps:
+  homelab: homelab-dashboards
 
 # Enable iframe embedding and anonymous Viewer access (e.g. for Home Assistant / local dashboards)
 env:
