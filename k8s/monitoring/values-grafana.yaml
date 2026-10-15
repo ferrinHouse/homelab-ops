@@ -296,3 +296,44 @@ alerting:
                 datasourceUid: __expr__
                 model: { refId: C, type: threshold, expression: B, conditions: [ { evaluator: { type: lt, params: [0.1] } } ] }
 
+
+          # Watch-the-watchers: Grafana (and its Gmail path) is independent of Checkmk, so it can tell
+          # you when Checkmk itself is down. Healthy = the Checkmk API answers with the host list.
+          # noData/execErr = Alerting: if the query fails or returns nothing, Checkmk is unreachable.
+          # The threshold is unreachable on purpose (host state is 0-2); only failure/no-data fires.
+          - uid: checkmk-unreachable
+            title: Checkmk unreachable
+            condition: C
+            for: 5m
+            noDataState: Alerting
+            execErrState: Alerting
+            labels:
+              severity: critical
+            annotations:
+              summary: 'Checkmk API is not answering'
+              description: 'Grafana cannot read the Checkmk REST API (http://checkmk.monitoring.svc.cluster.local:5000) for 5m. Checkmk runs on yoga-node; check the pod and the NAS-backed volume. Infra alerting is down while this fires.'
+            data:
+              - refId: A
+                relativeTimeRange: { from: 600, to: 0 }
+                datasourceUid: checkmk-infinity
+                model:
+                  refId: A
+                  type: json
+                  source: url
+                  format: table
+                  parser: backend
+                  url: 'http://checkmk.monitoring.svc.cluster.local:5000/homelab/check_mk/api/1.0/domain-types/host/collections/all'
+                  root_selector: value
+                  url_options:
+                    method: GET
+                    params: [ { key: columns, value: state } ]
+                    headers: [ { key: Accept, value: application/json } ]
+                  columns: [ { selector: extensions.state, text: state, type: number } ]
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+              - refId: B
+                datasourceUid: __expr__
+                model: { refId: B, type: reduce, expression: A, reducer: max, settings: { mode: dropNN } }
+              - refId: C
+                datasourceUid: __expr__
+                model: { refId: C, type: threshold, expression: B, conditions: [ { evaluator: { type: gt, params: [99] } } ] }
