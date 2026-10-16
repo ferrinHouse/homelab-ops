@@ -87,6 +87,13 @@ smtp:
   userKey: "user"
   passwordKey: "password"
 
+# The Infinity plugin is reinstalled from the URL above on every start into /var/lib/grafana/plugins,
+# which lives on the NFS volume. With a rolling update the OLD pod still has the plugin files open, so
+# the new pod's installer fails (".nfs...: device or resource busy") and crash-loops. Recreate stops the
+# old pod first. Grafana is single-replica on a single volume, so a brief restart gap is the same either way.
+deploymentStrategy:
+  type: Recreate
+
 # Grafana optimization for Pi
 resources:
   requests:
