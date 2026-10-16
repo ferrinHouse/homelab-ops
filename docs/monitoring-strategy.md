@@ -158,6 +158,13 @@ production to test it. Node-down relies on host DOWN, which Checkmk reports afte
   Actions secret, like `grafana-smtp`.
 
 **Phase 4: watch the watchers**
+- **Done 2026-10-15:** Checkmk `active_checks:httpv2` on `yoga-node` (services `Grafana health`, `Prometheus health`,
+  `Loki API`, via in-cluster DNS, expects 200). These are **dashboard-only** (not in the paging regex);
+  extend the notification rule's service list through the UI if you want a page. Grafana alert rule
+  `checkmk-unreachable` (`values-grafana.yaml`, Infinity query, `noData`/`execErr` = Alerting) emails via the
+  Gmail contact point, independent of Checkmk. Pipeline A->B->C verified against live Grafana (`C = 0`).
+- **Not done:** external heartbeat (needs an account on an outside service, e.g. a dead-man's-switch URL that
+  Checkmk or Grafana pings), so a whole-LAN/cluster/NAS outage still goes unreported.
 - Checkmk HTTP-checks Grafana, Prometheus and Loki.
 - Grafana/blackbox probes Checkmk `/homelab/`.
 - Optional external heartbeat. Checkmk (yoga-node), Prometheus (kubeprime) and Grafana all depend on the same
