@@ -1,0 +1,10 @@
+[Unit]
+Description=Restart cluster pods left broken by an NFS outage on pinas
+After=k3s.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/nfs-pod-bounce.sh
+# A bounce waits for databases and re-checks pods, so it can take several minutes
+TimeoutStartSec=1800
+Nice=10

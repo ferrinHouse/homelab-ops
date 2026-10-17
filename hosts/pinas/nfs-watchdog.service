@@ -1,0 +1,11 @@
+[Unit]
+Description=Check the NAS disks and NFS server, and recover them if they have failed
+# Do not race OpenMediaVault's own mounting at boot
+After=local-fs.target nfs-server.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/nfs-watchdog.sh
+# A recovery can legitimately take several minutes (waiting for the USB bus, fsck)
+TimeoutStartSec=1800
+Nice=10

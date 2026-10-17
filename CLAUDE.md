@@ -33,7 +33,8 @@ redeploy a running service, and always check whether a change is scoped to `k8s/
 ## Host-level files (`hosts/**`) are NOT deployed by CI
 
 `hosts/<node>/` holds files that live on a node's own filesystem, outside Kubernetes (currently
-`hosts/yoga-node/90-flannel-heal`, a NetworkManager dispatcher script). `ci.yaml` neither watches nor
+`hosts/yoga-node/90-flannel-heal`, a NetworkManager dispatcher script, and `hosts/pinas/` + `hosts/kubeprime/`, the NAS
+self-heal watchdog, pod-bounce timer and fan installer; see `hosts/pinas/README.md`). `ci.yaml` neither watches nor
 applies this directory, and its runner is on `kubeprime`, so merging a change here installs nothing. The repo
 copy is the source of truth and a record; a human has to install it on the node (each file's header and the
 README runbook give the command). If you change one, say so plainly rather than implying it is live. The files
