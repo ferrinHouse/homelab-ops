@@ -6,3 +6,6 @@ docs/network-inventory.md
 # NAS cleanup lists (personal file names, kept local)
 docs/music-*.md
 docs/photos-*.md
+
+# Pics for creating HomeAssistant Renderings
+HousePics/*

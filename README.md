@@ -374,6 +374,24 @@ sudo k3s kubectl get pvc -A
 # (Copy /etc/rancher/k3s/k3s.yaml from kubeprime to ~/.kube/config and replace 127.0.0.1 with 192.168.1.247)
 ```
 
+### Safe Full Homelab Reboot Orchestrator
+
+To safely restart the entire homelab (Home Assistant, K3s nodes, and the OMV NAS) in strict dependency order without risking NFS stale file handles or database corruption, run the PowerShell orchestrator from your management workstation:
+
+```powershell
+# Simulate run without touching any machines
+.\scripts\reboot-homelab.ps1 -DryRun
+
+# Execute live coordinated reboot
+.\scripts\reboot-homelab.ps1
+
+# Reboot Kubernetes & Home Assistant, but leave OMV NAS untouched
+.\scripts\reboot-homelab.ps1 -SkipNas
+```
+*(The script gracefully stops Frigate on `yoga-node`, reboots Home Assistant, cleanly stops `k3s-agent` on workers, stops `k3s` on `kubeprime`, reboots the NAS, waits for NFS port 2049, verifies the cluster returns to Ready, checks the `yoga-node` flannel overlay, and verifies all pods.)*
+
+
+
 ---
 
 ## 🔮 Future Architecture & Helm Migration Roadmap
