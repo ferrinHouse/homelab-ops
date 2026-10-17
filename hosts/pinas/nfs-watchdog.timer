@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the NAS/NFS watchdog every minute
+
+[Timer]
+# Give OpenMediaVault time to mount the disks and start NFS after a boot
+OnBootSec=5min
+OnUnitInactiveSec=1min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch the NAS NFS port every minute and restart broken NFS pods after an outage
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=1min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

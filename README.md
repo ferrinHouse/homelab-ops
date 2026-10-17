@@ -473,6 +473,9 @@ while the NAS still pings and answers SSH. The `NfsWorkloadsStuck` Prometheus al
    sudo systemctl start nfs-server ; sudo exportfs -v
    ```
    From the workstation: `Test-NetConnection 192.168.1.253 -Port 2049` must be `True`.
+   Also confirm the binds are writable: `for e in /export/*; do findmnt -no OPTIONS $e | cut -d, -f1; done` must print only
+   `rw`. After the 2026-10-16 recovery plex-config, mealie-data and npm-data came up `ro` while the disks were `rw`,
+   which crash-looped Postgres/Mealie (`Read-only file system`). Fix: `sudo mount -o remount,bind,rw /export/<name>`.
 7. **Bring the cluster back:** scale the workloads from step 1 to their original counts. Force-delete pods that
    stay in `ContainerCreating`; if a node still holds stale handles, `.\scripts\reboot-homelab.ps1 -SkipNas`.
 8. **Verify** Plex, Mealie, NPM, Whiskey Tracker, Grafana, and the Postgres pod logs.
@@ -482,6 +485,10 @@ test each disk alone to isolate the enclosure, and copy the databases/photos to 
 one enclosure, so it is a single point of failure.
 
 > Alertmanager is disabled, so the alerts in `values-prometheus.yaml` only show on Prometheus's `/alerts` page.
+
+**Automatic recovery:** [`hosts/pinas/`](hosts/pinas/README.md) has a watchdog that performs steps 2 and 4-6 by itself on
+pinas, a timer for kubeprime that restarts the pods left broken (step 7), and a fan-control installer. They are not
+deployed by CI; install them by hand as described there.
 
 1. **Phase 1: Edge & Network Utilities (Cloudflare DDNS & Nginx Proxy Manager)**:
    - Package Cloudflare DDNS and NPM into Helm charts under `k8s/apps/`. Re-use `npm-pvc` with `existingClaim` so SSL certificates and proxy hosts remain untouched.
