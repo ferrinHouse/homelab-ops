@@ -409,6 +409,62 @@ graph LR
     P4 --> P5["Phase 5: Unified CI/CD<br/>(Automated Deployments)"]
 ```
 
+### NAS / NFS Outage Recovery (`pinas`, `192.168.1.253`)
+
+**Symptoms:** pods stuck in `ContainerCreating` / `CreateContainerError`, `Stale file handle`, port 2049 closed
+while the NAS still pings and answers SSH. The `NfsWorkloadsStuck` Prometheus alert fires on this.
+
+**Known cause (2026-10-16):** the two data disks sit behind one JMicron USB enclosure. When it drops off the USB bus
+(`dmesg -T | grep "usb 2-2: USB disconnect"`) both ext4 filesystems take I/O errors, the `/srv` mounts go stale
+(`ls` returns `Input/output error`), and `nfs-server` stops. The Pi itself was healthy (`vcgencmd get_throttled` = `0x0`).
+
+| Disk UUID | Shares |
+|---|---|
+| `44477d40-c1ee-46e0-9104-14886001f78b` | ferrinMedia, whiskey-{app,db,photos}, KubernetesLogs, obsidian_data, travel-db |
+| `7462ec5d-a120-45df-a96c-f714d67b6943` | plex-config, mealie-data, npm-data |
+
+1. **Quiesce the cluster** (kubeprime) so nothing writes to dead mounts. Note replica counts first.
+   Everything that mounts NFS: all `default` deployments except `cloudflare-ddns`, plus `monitoring` `grafana`,
+   `prometheus-server` and the `loki` StatefulSet.
+   ```bash
+   sudo k3s kubectl get deploy,sts -A
+   sudo k3s kubectl scale deploy -n default <name> --replicas=0
+   ```
+2. **Clean up the NAS** (`ssh mferrin@192.168.1.253`):
+   ```bash
+   sudo systemctl stop nfs-server
+   sudo umount -l /export/* ; sudo umount -l /srv/dev-disk-by-uuid-*
+   sudo shutdown -h now
+   ```
+3. **Cold-cycle the enclosure:** unplug its power *and* USB cable, wait 30 s, reseat, power the enclosure, then the Pi.
+4. **Confirm the bus is stable** before touching the disks. Any new `USB disconnect` means hardware: stop and see
+   "If it keeps dropping".
+   ```bash
+   dmesg -T | grep -E "usb 2-2|sd[a-d]" | tail -20 ; lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT
+   ```
+5. **fsck** (unmounted; read-only pass first, repair only if it reports damage):
+   ```bash
+   sudo umount /srv/dev-disk-by-uuid-* 2>/dev/null
+   sudo fsck.ext4 -fn /dev/disk/by-uuid/<uuid>
+   sudo fsck.ext4 -fy /dev/disk/by-uuid/<uuid>
+   ```
+6. **Remount and restart NFS:**
+   ```bash
+   sudo mount -a
+   findmnt -rno SOURCE,TARGET | grep -E "srv|export"   # 2 /srv mounts + 10 /export binds
+   sudo systemctl start nfs-server ; sudo exportfs -v
+   ```
+   From the workstation: `Test-NetConnection 192.168.1.253 -Port 2049` must be `True`.
+7. **Bring the cluster back:** scale the workloads from step 1 to their original counts. Force-delete pods that
+   stay in `ContainerCreating`; if a node still holds stale handles, `.\scripts\reboot-homelab.ps1 -SkipNas`.
+8. **Verify** Plex, Mealie, NPM, Whiskey Tracker, Grafana, and the Postgres pod logs.
+
+**If it keeps dropping:** give the enclosure its own power supply (or a powered hub), swap the USB cable and port,
+test each disk alone to isolate the enclosure, and copy the databases/photos to another machine. Both disks share
+one enclosure, so it is a single point of failure.
+
+> Alertmanager is disabled, so the alerts in `values-prometheus.yaml` only show on Prometheus's `/alerts` page.
+
 1. **Phase 1: Edge & Network Utilities (Cloudflare DDNS & Nginx Proxy Manager)**:
    - Package Cloudflare DDNS and NPM into Helm charts under `k8s/apps/`. Re-use `npm-pvc` with `existingClaim` so SSL certificates and proxy hosts remain untouched.
 2. **Phase 2: Media Services (Plex Media Server)**:
