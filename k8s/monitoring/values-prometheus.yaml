@@ -28,6 +28,45 @@ server:
   service:
     servicePort: 80
 
+  # Home Assistant long-lived access token (secret created by ci.yaml from the
+  # HA_PROMETHEUS_TOKEN GitHub secret), read by the 'homeassistant' scrape job below
+  extraSecretMounts:
+    - name: ha-prometheus-token
+      mountPath: /etc/prometheus/secrets/ha
+      secretName: ha-prometheus-token
+      readOnly: true
+
+# Alert rules. Alertmanager is disabled, so these only show on the Prometheus /alerts page
+# (and in Grafana's Prometheus alert list) -- nothing is sent anywhere until Alertmanager is enabled.
+# The NAS runs no node exporter, so NFS trouble is detected from its symptoms in the cluster.
+serverFiles:
+  alerting_rules.yml:
+    groups:
+      - name: nas-nfs
+        rules:
+          - alert: NfsWorkloadsStuck
+            expr: sum(kube_pod_container_status_waiting_reason{reason=~"ContainerCreating|CreateContainerError|CreateContainerConfigError"}) >= 2
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "{{ $value }} containers stuck starting - NAS/NFS is likely down"
+              description: "See the 'NAS / NFS outage recovery' runbook in README.md."
+          - alert: NfsProvisionerDown
+            expr: kube_deployment_status_replicas_available{namespace="storage"} < 1
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "nfs-subdir-external-provisioner has no available replicas"
+          - alert: PodCrashLooping
+            expr: increase(kube_pod_container_status_restarts_total[30m]) > 5
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "{{ $labels.namespace }}/{{ $labels.pod }} restarted more than 5 times in 30m"
+
 # Disable Alertmanager to conserve memory (enable if routing alerts via email/webhook)
 alertmanager:
   enabled: false
@@ -67,3 +106,13 @@ extraScrapeConfigs: |
     static_configs:
       - targets: ['192.168.1.249:5000']
 
+  # Home Assistant (HAOS on Raspberry Pi) - entity availability, batteries, updates.
+  # Consumed by Checkmk's Prometheus special agent for the homeassistant host.
+  - job_name: 'homeassistant'
+    metrics_path: '/api/prometheus'
+    scrape_interval: 60s
+    scrape_timeout: 30s
+    authorization:
+      credentials_file: /etc/prometheus/secrets/ha/token
+    static_configs:
+      - targets: ['192.168.1.254:8123']

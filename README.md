@@ -206,7 +206,22 @@ In Kubernetes, **a `NodePort` is accessible on every node's IP address**, regard
 ### 1. Observability Stack (`monitoring` namespace)
 - **Grafana**: Visualizations and dashboards, pinned to NodePort `30001`, dynamically backed by 2 Gi on OMV. Pre-wired with internal Loki and Prometheus datasources.
 - **Loki**: Deployed in `SingleBinary` mode, TSDB v13 schema, with distributed memory caches disabled to fit comfortably within Pi RAM.
-- **Prometheus**: Metrics storage deployed via Helm (`prometheus-community/prometheus`) with 20 Gi dynamic NFS storage on OMV (15-day retention), Node Exporter daemonset for host-level hardware and OS telemetry (`node_*`), and resource limits optimized for Raspberry Pi. Heavy auxiliary components (Alertmanager, Pushgateway) are disabled to preserve RAM.
+- **Prometheus**: Metrics storage deployed via Helm (`prometheus-community/prometheus`) with 20 Gi dynamic NFS storage on OMV (15-day retention), Node Exporter daemonset for host-level hardware and OS telemetry (`node_*`), and resource limits optimized for Raspberry Pi. Heavy auxiliary components (Alertmanager, Pushgateway) are disabled to preserve RAM; alerting is handled by Grafana instead (below).
+- **Alerting (Grafana-managed)**: Six rules in the `Homelab` folder, provisioned from `alerting:` in [`values-grafana.yaml`](k8s/monitoring/values-grafana.yaml) and evaluated every minute against Prometheus. Notifications go by email (Gmail SMTP) to the `homelab-email` contact point, grouped by alert name and repeated every 12h while firing.
+
+  | Rule | Fires when | For | Severity |
+  | :--- | :--- | :--- | :--- |
+  | Scrape target down | any Prometheus target has `up < 1` (also fires if Prometheus itself is unreachable) | 5m | critical |
+  | Node not Ready | `kube_node_status_condition{Ready}` is not true | 5m | critical |
+  | Pod restarting repeatedly | more than 3 container restarts in 15m | 5m | warning |
+  | Pod running but not Ready | a `Running` pod fails readiness (finished Job pods are ignored) | 10m | warning |
+  | Node memory low | under 10% memory available | 10m | warning |
+  | Node disk space low | under 10% free on an ext4/xfs/btrfs mount | 15m | warning |
+
+  "Scrape target down" is the one that catches a broken flannel overlay: `kube-state-metrics` is only reachable from Prometheus across nodes, so it drops out when cross-node networking fails (this would have flagged the 2026-09-19/20 outage within 5 minutes). Rules are read-only in the Grafana UI; change them in the values file. Because the chart runs `alerting:` through Helm `tpl`, Grafana templates like `$labels.instance` must use Helm's raw-string escape (see the comment in the values file).
+
+  > [!NOTE]
+  > **Known blind spot:** alerts are evaluated and sent by Grafana, which is a single pod. If Grafana itself, or the node it runs on, goes down, nothing is sent. Catching that needs an external heartbeat (e.g. a dead-man's-switch service), which is not set up.
 - **Grafana Alloy**: Deployed as a `DaemonSet` running on all nodes (`kubeprime`, `kube2`, `yoga-node`). It tails all pod logs and extracts structured JSON fields (`Level`, `Message`, `WhiskeyName`, `Query`) for the Whiskey Tracker app before shipping to Loki.
 
 ### 2. Application Services (`default` namespace)
@@ -412,6 +427,62 @@ graph LR
     P4 --> P5["Phase 5: Unified CI/CD<br/>(Automated Deployments)"]
 ```
 
+### NAS / NFS Outage Recovery (`pinas`, `192.168.1.253`)
+
+**Symptoms:** pods stuck in `ContainerCreating` / `CreateContainerError`, `Stale file handle`, port 2049 closed
+while the NAS still pings and answers SSH. The `NfsWorkloadsStuck` Prometheus alert fires on this.
+
+**Known cause (2026-10-16):** the two data disks sit behind one JMicron USB enclosure. When it drops off the USB bus
+(`dmesg -T | grep "usb 2-2: USB disconnect"`) both ext4 filesystems take I/O errors, the `/srv` mounts go stale
+(`ls` returns `Input/output error`), and `nfs-server` stops. The Pi itself was healthy (`vcgencmd get_throttled` = `0x0`).
+
+| Disk UUID | Shares |
+|---|---|
+| `44477d40-c1ee-46e0-9104-14886001f78b` | ferrinMedia, whiskey-{app,db,photos}, KubernetesLogs, obsidian_data, travel-db |
+| `7462ec5d-a120-45df-a96c-f714d67b6943` | plex-config, mealie-data, npm-data |
+
+1. **Quiesce the cluster** (kubeprime) so nothing writes to dead mounts. Note replica counts first.
+   Everything that mounts NFS: all `default` deployments except `cloudflare-ddns`, plus `monitoring` `grafana`,
+   `prometheus-server` and the `loki` StatefulSet.
+   ```bash
+   sudo k3s kubectl get deploy,sts -A
+   sudo k3s kubectl scale deploy -n default <name> --replicas=0
+   ```
+2. **Clean up the NAS** (`ssh mferrin@192.168.1.253`):
+   ```bash
+   sudo systemctl stop nfs-server
+   sudo umount -l /export/* ; sudo umount -l /srv/dev-disk-by-uuid-*
+   sudo shutdown -h now
+   ```
+3. **Cold-cycle the enclosure:** unplug its power *and* USB cable, wait 30 s, reseat, power the enclosure, then the Pi.
+4. **Confirm the bus is stable** before touching the disks. Any new `USB disconnect` means hardware: stop and see
+   "If it keeps dropping".
+   ```bash
+   dmesg -T | grep -E "usb 2-2|sd[a-d]" | tail -20 ; lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT
+   ```
+5. **fsck** (unmounted; read-only pass first, repair only if it reports damage):
+   ```bash
+   sudo umount /srv/dev-disk-by-uuid-* 2>/dev/null
+   sudo fsck.ext4 -fn /dev/disk/by-uuid/<uuid>
+   sudo fsck.ext4 -fy /dev/disk/by-uuid/<uuid>
+   ```
+6. **Remount and restart NFS:**
+   ```bash
+   sudo mount -a
+   findmnt -rno SOURCE,TARGET | grep -E "srv|export"   # 2 /srv mounts + 10 /export binds
+   sudo systemctl start nfs-server ; sudo exportfs -v
+   ```
+   From the workstation: `Test-NetConnection 192.168.1.253 -Port 2049` must be `True`.
+7. **Bring the cluster back:** scale the workloads from step 1 to their original counts. Force-delete pods that
+   stay in `ContainerCreating`; if a node still holds stale handles, `.\scripts\reboot-homelab.ps1 -SkipNas`.
+8. **Verify** Plex, Mealie, NPM, Whiskey Tracker, Grafana, and the Postgres pod logs.
+
+**If it keeps dropping:** give the enclosure its own power supply (or a powered hub), swap the USB cable and port,
+test each disk alone to isolate the enclosure, and copy the databases/photos to another machine. Both disks share
+one enclosure, so it is a single point of failure.
+
+> Alertmanager is disabled, so the alerts in `values-prometheus.yaml` only show on Prometheus's `/alerts` page.
+
 1. **Phase 1: Edge & Network Utilities (Cloudflare DDNS & Nginx Proxy Manager)**:
    - Package Cloudflare DDNS and NPM into Helm charts under `k8s/apps/`. Re-use `npm-pvc` with `existingClaim` so SSL certificates and proxy hosts remain untouched.
 2. **Phase 2: Media Services (Plex Media Server)**:
@@ -449,6 +520,40 @@ and restarts the affected deployments so rotated values take effect immediately.
 variables → Actions), then push any change to `main` (or run the workflow manually via
 `workflow_dispatch`) to roll it out.
 
+Grafana's alert email login is the `grafana-smtp` Secret in the `monitoring` namespace. CI creates it (before the
+Grafana upgrade, since the pod cannot start without it) from the same Gmail account and the same
+`MEALIE_SMTP_PASSWORD` GitHub secret that Mealie uses, so rotating that one secret rotates both. Grafana only reads
+it at startup, so after a rotation also run `sudo k3s kubectl rollout restart deployment/grafana -n monitoring`.
+
 `cloudflare-secrets`, `travel-secrets`, and `ghcr-secret` currently still need to be created
 out-of-band on the cluster (`kubectl create secret ...`) since CI doesn't manage them yet — folding
 them into the same CI-managed pattern above is a good follow-up.
+
+---
+
+## 🩺 Checkmk Monitoring
+
+Checkmk Raw (site `homelab`) runs in the `monitoring` namespace, pinned to `yoga-node` with a 20 Gi `local-path` volume. Manifest: [`k8s/configs/checkmk.yaml`](k8s/configs/checkmk.yaml).
+
+| Endpoint | Address |
+| :--- | :--- |
+| Web UI | `http://192.168.1.249:30500/homelab/` (user `cmkadmin`, password from the `CHECKMK_PASSWORD` GitHub secret) |
+| Agent receiver | `192.168.1.249:30800` |
+
+Setup helpers live in [`checkmk/`](checkmk/): `hosts.txt` is the monitored-host list, `add-hosts.sh` creates them via the REST API, and `install-agent.sh` installs and registers the agent on a Debian host. Data is stored only on yoga-node's disk, so use a Checkmk backup job if history matters.
+
+### Checkmk backup & restore
+
+A `checkmk-backup` CronJob (03:30 daily, [`k8s/configs/checkmk-backup.yaml`](k8s/configs/checkmk-backup.yaml)) archives the whole site to `checkmk-homelab-<timestamp>.tar.gz` on the OMV NAS, keeping 7 days. Archives land in the dynamic NFS folder `/export/KubernetesLogs/monitoring-checkmk-backups-pvc-*/`.
+
+Run one on demand: `kubectl -n monitoring create job --from=cronjob/checkmk-backup checkmk-backup-manual`
+
+Restore (scale Checkmk down first so nothing writes to the volume):
+
+```bash
+kubectl -n monitoring scale deploy/checkmk --replicas=0
+# extract the chosen archive over the checkmk-data volume on yoga-node, e.g. via a one-off pod
+# mounting checkmk-data + checkmk-backups and running: tar -C /omd/sites -xzf /backup/<file>.tar.gz
+kubectl -n monitoring scale deploy/checkmk --replicas=1
+```
+

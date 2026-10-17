@@ -18,7 +18,30 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": null,
-  "links": [],
+  "links": [
+    {
+      "title": "Checkmk: problems",
+      "type": "link",
+      "icon": "external link",
+      "tooltip": "Open service problems in Checkmk",
+      "url": "https://cmk.ferrinhouse.org/homelab/check_mk/index.py?start_url=view.py%3Fview_name%3Dsvcproblems",
+      "targetBlank": true,
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": false
+    },
+    {
+      "title": "Checkmk: all hosts",
+      "type": "link",
+      "icon": "external link",
+      "tooltip": "Open host overview in Checkmk",
+      "url": "https://cmk.ferrinhouse.org/homelab/check_mk/index.py?start_url=view.py%3Fview_name%3Dallhosts",
+      "targetBlank": true,
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": false
+    }
+  ],
   "liveNow": false,
   "panels": [
     {
