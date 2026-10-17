@@ -61,6 +61,8 @@ metadata:
   name: mealiedb-deployment
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: mealiedb
@@ -84,6 +86,30 @@ spec:
               value: "mealiedb"
           ports:
             - containerPort: 5432
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - mealie
+                - -d
+                - mealiedb
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - mealie
+                - -d
+                - mealiedb
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 3
           volumeMounts:
             - name: postgres-storage
               mountPath: /var/lib/postgresql/data
@@ -112,6 +138,8 @@ metadata:
   name: mealie-app-deployment
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: mealie
@@ -168,6 +196,22 @@ spec:
               value: "true"
           ports:
             - containerPort: 9000
+          livenessProbe:
+            httpGet:
+              path: /api/app/about
+              port: 9000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/app/about
+              port: 9000
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 3
           volumeMounts:
             - name: mealie-storage
               mountPath: /app/data
