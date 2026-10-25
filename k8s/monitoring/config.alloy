@@ -36,6 +36,18 @@ loki.source.kubernetes "pods" {
 loki.process "pods" {
   forward_to = [loki.write.local.receiver]
 
+  // --- Drop lines Loki will reject anyway --------------------------------
+  // loki.source.kubernetes re-sends a stream's last line on every reconnect.
+  // For a pod that has been silent for over a week (e.g. the svclb-* pods,
+  // which only log at startup), that line is older than Loki's
+  // reject_old_samples_max_age (168h) and each re-send fails with HTTP 400
+  // "timestamp too old", logged as an error by both Alloy and Loki. Drop
+  // such lines here, just inside the 168h window.
+  stage.drop {
+    older_than          = "167h"
+    drop_counter_reason = "older_than_loki_limit"
+  }
+
   // --- Tier 1: logfmt (go-kit style) monitoring-stack components ---------
   // grafana, loki, prometheus-server, alloy all log key=value logfmt.
   // loki-canary (plain text) and loki-gateway (nginx access logs) are
