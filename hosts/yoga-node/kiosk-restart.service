@@ -6,7 +6,7 @@
 # OOMScoreAdjust=-500, so the kernel kills other processes (it killed Mealie hundreds of times on
 # 2026-10-29/30) rather than the browser. A nightly restart gives a fresh page instead.
 #
-# What it does: restarts kiosk.service (cage + /usr/local/bin/kiosk-session.sh + Chromium). The
+# What it does: restarts kiosk.service (cage + /usr/local/bin/kiosk-session.sh + Chromium) if it is running. The
 # screen is blank for a few seconds while Chromium reloads the dashboard. Triggered by
 # kiosk-restart.timer.
 #
@@ -16,8 +16,9 @@
 #   systemctl list-timers kiosk-restart.timer
 [Unit]
 Description=Restart the Home Assistant kiosk browser to release leaked memory
-Requisite=kiosk.service
 
+# try-restart is a no-op when the kiosk is stopped. No Requisite=/Requires= on kiosk.service: those
+# propagate the kiosk's stop to this unit, which then kills its own systemctl mid-restart.
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/systemctl restart kiosk.service
+ExecStart=/usr/bin/systemctl --no-block try-restart kiosk.service
