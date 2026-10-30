@@ -148,9 +148,28 @@ spec:
       labels:
         app: mealie
     spec:
+      # yoga-node runs Frigate, Checkmk and a Chromium kiosk and regularly exhausts RAM and swap;
+      # the kernel then OOM-kills Mealie first. The image is multi-arch, so keep it on the Pis.
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values:
+                      - yoga-node
       containers:
         - name: mealie
           image: ghcr.io/mealie-recipes/mealie:latest
+          # A request moves the pod out of BestEffort (oom_score_adj 1000, killed first under node
+          # memory pressure); steady-state RSS is ~210Mi, with headroom for recipe imports.
+          resources:
+            requests:
+              memory: 300Mi
+              cpu: 100m
+            limits:
+              memory: 1Gi
           env:
             - name: TZ
               value: "America/Chicago"
@@ -194,6 +213,9 @@ spec:
               value: "mike.ferrin.84+ferrinmealplanner@gmail.com"
             - name: SMTP_TLS
               value: "true"
+            # Already set on the live Deployment but missing here; one worker keeps memory low
+            - name: UVICORN_WORKERS
+              value: "1"
           ports:
             - containerPort: 9000
           livenessProbe:
