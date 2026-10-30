@@ -31,9 +31,9 @@ graph TD
         OMV["OpenMediaVault NAS<br/><b>192.168.1.253</b><br/>(NFS Exports)"]
         
         subgraph K3sCluster ["k3s Multi-Node Cluster"]
-            NODE1["<b>kubeprime</b> (192.168.1.247)<br/>Control-Plane / Master (Pi ARM64)<br/>• GitHub Self-Hosted Runner<br/>• Loki Gateway<br/>• Whiskey Tracker (web)<br/>• Family Travel<br/>• Obsidian Sync DB<br/>• Traefik, CoreDNS"]
+            NODE1["<b>kubeprime</b> (192.168.1.247)<br/>Control-Plane / Master (Pi ARM64)<br/>• GitHub Self-Hosted Runner<br/>• Loki Gateway<br/>• Whiskey Tracker (web)<br/>• Family Travel<br/>• Obsidian Sync DB<br/>• Mealie App (kept off yoga-node)<br/>• Traefik, CoreDNS"]
             NODE2["<b>kube2</b> (192.168.1.248)<br/>Worker Node (Pi ARM64)<br/>• Nginx Proxy Manager (NPM)<br/>• NFS Provisioner<br/>• kube-state-metrics"]
-            NODE3["<b>yoga-node</b> (192.168.1.249)<br/>Worker / Edge Node (x86_64)<br/>• Grafana<br/>• Loki + Prometheus<br/>• Plex<br/>• Mealie App + Mealie DB (Postgres)<br/>• Postgres (postgres-service)<br/>• Cloudflare DDNS"]
+            NODE3["<b>yoga-node</b> (192.168.1.249)<br/>Worker / Edge Node (x86_64)<br/>• Grafana<br/>• Loki + Prometheus<br/>• Plex<br/>• Mealie DB (Postgres)<br/>• Postgres (postgres-service)<br/>• Cloudflare DDNS"]
         end
     end
 
@@ -79,7 +79,7 @@ The cluster is a multi-architecture hybrid running **k3s v1.33.4+k3s1** with **c
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **`kubeprime`** | `192.168.1.247` | `control-plane,master` | ARM64 (Raspberry Pi) | Debian 12 (bookworm) / `6.12.25+rpt-rpi-v8` | Self-hosted GitHub Runner, Loki Gateway, Whiskey Tracker (web), Family Travel, Obsidian Sync DB, Traefik, CoreDNS, metrics-server |
 | **`kube2`** | `192.168.1.248` | `worker` | ARM64 (Raspberry Pi) | Debian 12 (bookworm) / `6.12.25+rpt-rpi-v8` | Nginx Proxy Manager, NFS Provisioner, kube-state-metrics |
-| **`yoga-node`** | `192.168.1.249` | `edge,worker` | x86_64 (amd64) | Debian 13 (trixie) / `6.12.107+deb13-amd64` | Grafana, Loki, Prometheus, Plex, Mealie App + DB, Postgres (`postgres-service`), Cloudflare DDNS |
+| **`yoga-node`** | `192.168.1.249` | `edge,worker` | x86_64 (amd64) | Debian 13 (trixie) / `6.12.107+deb13-amd64` | Grafana, Loki, Prometheus, Plex, Mealie DB, Postgres (`postgres-service`), Cloudflare DDNS, Frigate + the HA touchscreen kiosk (host) |
 
 Every node also runs an **Alloy** collector, a **Loki canary**, a **node-exporter** and the K3s **ServiceLB**
 proxy pods (`svclb-*`) as DaemonSets. `yoga-node` is the newest node (it joined in early September 2026), and
@@ -182,7 +182,7 @@ In Kubernetes, **a `NodePort` is accessible on every node's IP address**, regard
 | Service Name | Namespace | Node Hosted | Service Type | Internal Port | NodePort / Exposed Port | Upstream Routing URL |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Grafana** | `monitoring` | `yoga-node` | `NodePort` | `80` | **`30001`** | `http://192.168.1.247:30001` |
-| **Mealie App** | `default` | `yoga-node` | `NodePort` | `9000` | **`30925`** | `http://192.168.1.247:30925` |
+| **Mealie App** | `default` | `kubeprime` / `kube2` (affinity keeps it off `yoga-node`) | `NodePort` | `9000` | **`30925`** | `http://192.168.1.247:30925` |
 | **Mealie Database**| `default` | `yoga-node` | `ClusterIP` | `5432` | None (Internal) | `mealiedb-service:5432` |
 | **Postgres** | `default` | `yoga-node` | `ClusterIP` | `5432` | None (Internal) | `postgres-service:5432` |
 | **Whiskey Tracker** | `default` | `kubeprime` | `NodePort` | `80` | **`30080`** | `http://192.168.1.247:30080` |
@@ -234,6 +234,7 @@ In Kubernetes, **a `NodePort` is accessible on every node's IP address**, regard
 
 ### 3. Edge Services (Host Docker on `yoga-node`)
 - **Frigate NVR & go2rtc**: Real-time NVR integrating 3 Wyze Cams (Thingino firmware) on the IoT subnet (`10.10.10.x`) with Intel OpenVINO AI detection on the UHD Graphics iGPU, VAAPI hardware decode, and local NVMe storage. Detailed in [`docs/nvr-frigate-architecture.md`](docs/nvr-frigate-architecture.md).
+- **Touchscreen kiosk**: `kiosk.service` runs `cage` + `/usr/local/bin/kiosk-session.sh`, which shows the Home Assistant homelab dashboard full-screen in Chromium on the laptop's own display. The page never reloads and its memory grows by hundreds of MiB a week, so [`hosts/yoga-node/kiosk-restart.timer`](hosts/yoga-node/kiosk-restart.timer) restarts it nightly at 03:30 (installed by hand; see the header of `kiosk-restart.service`).
 
 ---
 
