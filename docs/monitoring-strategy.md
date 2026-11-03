@@ -49,6 +49,27 @@ cleanup). Email notifications deliver (see §3a).
 | `extra_service_conf:notes_url` on `kube2` services `^NPM ` | link | Phase 2: -> Grafana *Pods & Containers Deep Dive* (`var-namespace=default&var-container=npm`, metrics and Loki logs) |
 | Notification rule (stock mail rule, edited): host down + service CRIT only for `^NPM `, `^Home Assistant UI`, `^Internet ping`, `^NFS server port`, `^Interface eth1$` | paging scope | Everything else is dashboard-only, per the top-5 decision |
 | Disabled services: `gateway` / `Interface [0-9]+$` | silenced | Index-numbered leftovers (wifi netdevs, `br-iot`). Unused ports `lan1`/`lan4` (no link) are not discovered |
+| **PENDING, not yet applied:** Disabled services: `yoga-node` / `Filesystem /sys/firmware/efi/efivars` | silenced | UEFI variable store, a 184 KiB virtual fs that sits at ~80% by design (WARN since 2026-10-22). See "Pending rule changes" below |
+| **PENDING, not yet applied:** `ntp_time` (NTP time synchronisation) on `omv-nas`: "time since last sync" warn **1 h** / crit **4 h** | thresholds raised | Offset is fine (0.0086 ms); the 17 min warn is shorter than the NAS's sync interval so it flaps. See below |
+
+### Pending rule changes (2026-10-22): apply by hand in the Checkmk UI
+
+Found while checking the dashboard: the only two non-OK services were both noise, not faults. Neither rule is in
+the live site yet. Edit the two **PENDING** rows above (drop the prefix) once applied.
+
+1. **Silence the efivars filesystem on `yoga-node`**
+   - *Setup > Services > Disabled services* (or search "Disabled services"), **Add rule**.
+   - Conditions: *Explicit hosts* = `yoga-node`; *Services* = `Filesystem /sys/firmware/efi/efivars`.
+   - Save, then **Activate changes**. Same pattern as the `/rom` and `/var/lib/kubelet/pods/` rules above.
+   - If the service lingers, run *Setup > Hosts > yoga-node > Save & run service discovery* and accept removal of
+     the vanished service.
+2. **Relax NTP "time since last sync" on `omv-nas`**
+   - Search rulesets for "NTP time synchronisation" (`ntp_time`; in 2.4 it also covers chrony), **Add rule**.
+   - Conditions: *Explicit hosts* = `omv-nas`.
+   - Value: set *Time since last sync* warn = 1 hour, crit = 4 hours. These are my picks (the old crit was 1 h);
+     leave the offset thresholds alone. If the NAS has no regular sync at all, check `chronyc tracking` on
+     `omv-nas` before loosening further, since the check exists to catch a dead time source.
+   - Save, **Activate changes**, and confirm `NTP Time` returns to OK on the next check cycle.
 
 ---
 
@@ -242,6 +263,7 @@ The TL-SG108E switch (`192.168.8.177`) has no SSH; web UI only.
 - [ ] Consider a second paging path for a total-LAN/cluster failure (see Phase 4); Checkmk runs on yoga-node.
 - [x] Phase 3: Homelab Overview deployed; all nine data panels return data through `grafana_ro` (8 top-5 checks, 6 hosts, 0 problems). Verified via `POST /api/ds/query`.
 - [ ] Phase 3 follow-up: add omv-nas / gateway / homeassistant panels (disk, WAN throughput) and a screenshot-level visual review in the UI.
+- [ ] Apply the two pending rules (efivars filesystem on `yoga-node`, NTP sync thresholds on `omv-nas`) in the Checkmk UI; steps are under "Pending rule changes" in §1.
 - [ ] Disable SSH password auth on the gateway.
 - [ ] Remove stale `24.220.158.77` from `~/.ssh/known_hosts`.
 - [ ] Optional: remove `CMK_SECRET` from `~/.bash_profile` and use the Bitwarden CLI instead.
