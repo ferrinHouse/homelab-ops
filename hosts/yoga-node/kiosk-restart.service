@@ -1,0 +1,24 @@
+# Restart the touchscreen kiosk (Chromium showing the Home Assistant homelab dashboard) on yoga-node.
+#
+# Why this exists: the dashboard is one long-lived page that never reloads, and its renderer grows
+# without bound (731 MiB after 13 days, 940 MiB for all of Chromium). yoga-node only has 7.5 GiB and
+# also runs Frigate, Checkmk and cluster pods, so it ran out of RAM and swap. kiosk.service sets
+# OOMScoreAdjust=-500, so the kernel kills other processes (it killed Mealie hundreds of times on
+# 2026-10-29/30) rather than the browser. A nightly restart gives a fresh page instead.
+#
+# What it does: restarts kiosk.service (cage + /usr/local/bin/kiosk-session.sh + Chromium) if it is running. The
+# screen is blank for a few seconds while Chromium reloads the dashboard. Triggered by
+# kiosk-restart.timer.
+#
+# Install (on yoga-node, from a checkout of this repo):
+#   sudo install -m 0644 hosts/yoga-node/kiosk-restart.service hosts/yoga-node/kiosk-restart.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now kiosk-restart.timer
+#   systemctl list-timers kiosk-restart.timer
+[Unit]
+Description=Restart the Home Assistant kiosk browser to release leaked memory
+
+# try-restart is a no-op when the kiosk is stopped. No Requisite=/Requires= on kiosk.service: those
+# propagate the kiosk's stop to this unit, which then kills its own systemctl mid-restart.
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl --no-block try-restart kiosk.service

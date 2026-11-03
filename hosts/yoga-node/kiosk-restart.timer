@@ -1,0 +1,10 @@
+# Nightly trigger for kiosk-restart.service; see that file for why and how to install.
+[Unit]
+Description=Restart the Home Assistant kiosk browser every night
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target
