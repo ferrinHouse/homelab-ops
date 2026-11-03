@@ -301,6 +301,8 @@ alerting:
           # you when Checkmk itself is down. Healthy = the Checkmk API answers with the host list.
           # noData/execErr = Alerting: if the query fails or returns nothing, Checkmk is unreachable.
           # The threshold is unreachable on purpose (host state is 0-2); only failure/no-data fires.
+          # summarizeExpression collapses the per-host rows to one value: alerting turns each table row
+          # into its own series, and several unlabelled rows fail with "duplicate results with labels {}".
           - uid: checkmk-unreachable
             title: Checkmk unreachable
             condition: C
@@ -322,6 +324,7 @@ alerting:
                   source: url
                   format: table
                   parser: backend
+                  summarizeExpression: 'max(state)'
                   url: 'http://checkmk.monitoring.svc.cluster.local:5000/homelab/check_mk/api/1.0/domain-types/host/collections/all'
                   root_selector: value
                   url_options:
