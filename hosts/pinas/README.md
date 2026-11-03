@@ -3,6 +3,13 @@
 Files for the OpenMediaVault NAS `pinas` (`192.168.1.253`, Raspberry Pi 4 in a Geekworm NASPi Gemini 2.5 / X882 V2.0),
 plus the matching pod-restart timer for `kubeprime` (in [`../kubeprime/`](../kubeprime/)).
 
+> **Rebuilt 2026-10-29:** pinas is now a **Raspberry Pi 5** on plain **Debian 13** (no OpenMediaVault) with a single
+> 3.6T **PCIe NVMe** (`UUID=be77ee55-...`, mounted at `/mnt/nvme1`). Every `/export/*` is an fstab bind mount from
+> `/mnt/nvme1/pinas-backup/<old-disk-uuid>/<share>`. The USB-bridge history below is why the watchdog exists; its
+> `DISKS` now points at the NVMe, it finds each disk's mountpoint from `/etc/fstab`, and `USB_DEV` is empty.
+> The OMV-specific notes (folder2ram, `/srv` mounts) and the fan section describe the old Pi 4 build.
+> Installed and enabled on 2026-11-03 after a dry run (healthy path + simulated missing export).
+
 **None of this is deployed by CI.** `ci.yaml` does not watch `hosts/**` and its runner cannot reach pinas. Merging a
 change here installs nothing; a human installs each file by hand (below). The repo copy is the source of truth.
 
@@ -80,6 +87,13 @@ sudo systemctl enable --now nfs-pod-bounce.timer
 It only acts after NFS has been down for at least 45 s and then stable for 90 s, restarts unhealthy NFS pods only
 (databases first), and runs at most once per 15 minutes. `BOUNCE_ALL=1` in `/etc/default/nfs-pod-bounce` restarts
 every NFS pod instead. Logs: `journalctl -t nfs-pod-bounce`.
+
+## Checkmk agent
+
+Installed 2026-11-03 (`check-mk-agent` 2.4.0p37, the `.deb` from `http://192.168.1.249:30500/homelab/check_mk/agents/`).
+Like the other Pis it runs in legacy pull mode: `check-mk-agent.socket` on TCP 6556, no `cmk-agent-ctl` registration
+(`checkmk/install-agent.sh`'s registration step does not apply on arm64). Checkmk still knows the host as `omv-nas`.
+After a rebuild, run service discovery on `omv-nas` in the Checkmk UI to drop the old `/srv` disk and OMV services.
 
 ## Still manual
 
