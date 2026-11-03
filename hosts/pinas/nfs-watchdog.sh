@@ -1,10 +1,11 @@
 #!/bin/bash
-# NFS self-heal watchdog for pinas (OpenMediaVault NAS, 192.168.1.253).
+# NFS self-heal watchdog for pinas (NAS, 192.168.1.253; Raspberry Pi 5 + NVMe since the 2026-10-29 rebuild).
 #
 # Why this exists: both data disks sit behind one JMicron JMS561 USB-to-SATA bridge (Geekworm
 # NASPi Gemini 2.5 / X882). When it drops off the USB bus (2026-10-16, 17 times in ~35 minutes) the
 # ext4 filesystems take I/O errors, the /srv mounts go stale, and nfs-server stops. The disks re-enumerate
-# on their own within seconds, but nothing remounted them or restarted NFS.
+# on their own within seconds, but nothing remounted them or restarted NFS. The NAS has since moved to a
+# PCIe NVMe; the probes and recovery still cover a stale disk mount, read-only binds and a stopped NFS.
 #
 # What it does, once a minute (see nfs-watchdog.timer):
 #   1. Probe: each data disk mounted + readable + writable, every /export bind mount present, nfs-server
@@ -29,11 +30,14 @@
 set -u
 
 # --- configuration (override in /etc/default/nfs-watchdog) -------------------------------------
-# Disk UUIDs of the two data disks (see /etc/fstab). DISK_A holds ferrinMedia, whiskey-*, KubernetesLogs,
-# obsidian_data, travel-db; DISK_B holds plex-config, mealie-data, npm-data.
-DISKS="44477d40-c1ee-46e0-9104-14886001f78b 7462ec5d-a120-45df-a96c-f714d67b6943"
+# Filesystem UUIDs of the data disks; each must have an /etc/fstab entry, which gives its mountpoint.
+# Since the 2026-10-29 rebuild this is the single NVMe on the Pi 5's PCIe (/mnt/nvme1) holding every export.
+# (Before: two SATA disks 44477d40-... and 7462ec5d-... behind the USB bridge, mounted under /srv by OMV.)
+DISKS="be77ee55-2852-4994-ae9f-26b76de17318"
 EXPORTS="ferrinMedia plex-config mealie-data npm-data whiskey-db whiskey-photos whiskey-app KubernetesLogs obsidian_data travel-db"
-USB_DEV="usb 2-2"            # kernel log prefix of the enclosure, matches "usb 2-2: USB disconnect"
+# Kernel log prefix of a USB enclosure (e.g. "usb 2-2" matches "usb 2-2: USB disconnect"). Empty for the
+# PCIe NVMe: recovery then only waits for the disk to be visible, not for a quiet USB bus.
+USB_DEV=""
 PROBE_TIMEOUT=10             # seconds before a filesystem probe is killed and counted as failed
 FAILS_BEFORE_ACT=2           # consecutive failed probes before recovering
 STABLE_SECONDS=30            # USB bus must log no disconnects for this long before touching the disks
@@ -70,12 +74,16 @@ probe_dir() {
     timeout -s KILL "$PROBE_TIMEOUT" sh -c ': > "$1/.nfs-watchdog" && rm -f "$1/.nfs-watchdog"' _ "$d" 2>/dev/null || return 1
 }
 
+# Mountpoint of a data disk, from its /etc/fstab entry (works for OMV's /srv/dev-disk-by-uuid-* too).
+disk_mnt() { findmnt -s -n -o TARGET -S "UUID=$1"; }
+
 # Echo the first problem found and return 1; return 0 when everything is healthy.
 check_health() {
     local u e
     for u in $DISKS; do
-        mountpoint -q "/srv/dev-disk-by-uuid-$u" || { echo "disk $u is not mounted"; return 1; }
-        probe_dir "/srv/dev-disk-by-uuid-$u"     || { echo "disk $u failed the read/write probe"; return 1; }
+        [ -n "$(disk_mnt "$u")" ] || { echo "disk $u has no /etc/fstab entry (fix DISKS)"; return 1; }
+        mountpoint -q "$(disk_mnt "$u")" || { echo "disk $u is not mounted"; return 1; }
+        probe_dir "$(disk_mnt "$u")"     || { echo "disk $u failed the read/write probe"; return 1; }
     done
     # The bind mounts need their own read/write probe: after the 2026-10-16 recovery the disks were rw
     # but three binds (plex-config, mealie-data, npm-data) had come up read-only, so Postgres and
@@ -89,7 +97,7 @@ check_health() {
     return 0
 }
 
-usb_disconnects() { dmesg 2>/dev/null | grep -c "$USB_DEV: USB disconnect"; }
+usb_disconnects() { [ -n "$USB_DEV" ] || { echo 0; return; }; dmesg 2>/dev/null | grep -c "$USB_DEV: USB disconnect"; }
 
 wait_for_stable_bus() {
     local waited=0 before after u missing
@@ -118,7 +126,7 @@ attempts_in_window() {
 # Remounting a bind rw does not disturb NFS clients. Returns 0 only if that made everything healthy.
 heal_ro_binds() {
     local u e fixed=0
-    for u in $DISKS; do probe_dir "/srv/dev-disk-by-uuid-$u" || return 1; done   # disk problem: needs full recovery
+    for u in $DISKS; do probe_dir "$(disk_mnt "$u")" || return 1; done   # disk problem: needs full recovery
     for e in $EXPORTS; do
         mountpoint -q "/export/$e" || return 1
         if ! probe_dir "/export/$e"; then
@@ -136,7 +144,7 @@ recover() {
     warn "recovery started"
     run systemctl stop nfs-server
     for e in $EXPORTS; do run umount -l "/export/$e" 2>/dev/null; done
-    for u in $DISKS; do run umount -l "/srv/dev-disk-by-uuid-$u" 2>/dev/null; done
+    for u in $DISKS; do run umount -l "$(disk_mnt "$u")" 2>/dev/null; done
 
     if [ "$DRY_RUN" != 1 ]; then
         wait_for_stable_bus || { crit "USB bus never settled within ${STABLE_WAIT_MAX}s; NFS left DOWN, hardware needs attention"; return 1; }
@@ -154,12 +162,12 @@ recover() {
         log "fsck on $u exited $rc"
     done
 
-    for u in $DISKS; do run mount "/srv/dev-disk-by-uuid-$u" || { crit "could not mount disk $u"; return 1; }; done
+    for u in $DISKS; do run mount "$(disk_mnt "$u")" || { crit "could not mount disk $u"; return 1; }; done
     for e in $EXPORTS; do run mount "/export/$e" || { crit "could not mount /export/$e"; return 1; }; done
 
     if [ "$DRY_RUN" != 1 ]; then
         for u in $DISKS; do
-            probe_dir "/srv/dev-disk-by-uuid-$u" || { crit "disk $u still fails probes after remount; NFS left DOWN"; return 1; }
+            probe_dir "$(disk_mnt "$u")" || { crit "disk $u still fails probes after remount; NFS left DOWN"; return 1; }
         done
     fi
     run systemctl start nfs-server
