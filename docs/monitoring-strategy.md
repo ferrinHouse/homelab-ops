@@ -184,6 +184,9 @@ production to test it. Node-down relies on host DOWN, which Checkmk reports afte
   extend the notification rule's service list through the UI if you want a page. Grafana alert rule
   `checkmk-unreachable` (`values-grafana.yaml`, Infinity query, `noData`/`execErr` = Alerting) emails via the
   Gmail contact point, independent of Checkmk. Pipeline A->B->C verified against live Grafana (`C = 0`).
+  **Fixed 2026-11-03:** with more than one Checkmk host the Infinity table returned one unlabelled row per host,
+  and the rule failed with "duplicate results with labels {}", so it sat in `execErr` and fired falsely. Query A
+  now sets `summarizeExpression: max(state)` to return a single value; re-verified via `/api/v1/eval` (`C = 0`).
 - **Not done:** external heartbeat (needs an account on an outside service, e.g. a dead-man's-switch URL that
   Checkmk or Grafana pings), so a whole-LAN/cluster/NAS outage still goes unreported.
 - Checkmk HTTP-checks Grafana, Prometheus and Loki.
