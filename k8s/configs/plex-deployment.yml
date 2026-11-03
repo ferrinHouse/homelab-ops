@@ -35,6 +35,14 @@ spec:
       containers:
         - name: plex
           image: lscr.io/linuxserver/plex:latest
+          # A request lets the scheduler account for Plex instead of treating it as free (it was
+          # OOM-killed 100+ times on yoga-node). Working set ~445Mi, peaks ~575Mi; transcodes spike higher.
+          resources:
+            requests:
+              memory: 512Mi
+              cpu: 250m
+            limits:
+              memory: 2Gi
           env:
             - name: PUID
               value: "1001"

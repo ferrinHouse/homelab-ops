@@ -19,6 +19,13 @@ spec:
       - name: ddns
         image: favonia/cloudflare-ddns:latest
         imagePullPolicy: Always
+        # A request moves the pod out of BestEffort (killed first under node memory pressure).
+        resources:
+          requests:
+            memory: 48Mi
+            cpu: 10m
+          limits:
+            memory: 128Mi
         env:
         - name: CF_API_TOKEN
           valueFrom:

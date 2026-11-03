@@ -98,7 +98,8 @@ deploymentStrategy:
 resources:
   requests:
     cpu: 100m
-    memory: 128Mi
+    # Working set sits at ~370Mi; a 128Mi request made its node look emptier than it is.
+    memory: 384Mi
   limits:
     cpu: 500m
     memory: 512Mi

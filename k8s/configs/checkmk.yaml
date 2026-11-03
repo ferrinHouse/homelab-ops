@@ -50,10 +50,12 @@ spec:
           containerPort: 5000
         - name: agent-receiver
           containerPort: 8000
+        # Request sized to real use (median ~1.4Gi, peak ~1.95Gi) so yoga-node's free memory isn't
+        # overstated to the scheduler.
         resources:
           requests:
             cpu: 250m
-            memory: 768Mi
+            memory: 1536Mi
           limits:
             memory: 2Gi
         readinessProbe:
