@@ -51,13 +51,15 @@ spec:
         - name: agent-receiver
           containerPort: 8000
         # Request sized to real use (median ~1.4Gi, peak ~1.95Gi) so yoga-node's free memory isn't
-        # overstated to the scheduler.
+        # overstated to the scheduler. The limit leaves room for UI automation calls (service discovery
+        # spawns extra Apache/automation-helper workers): at 2Gi it idled at ~1.7Gi and was OOM-killed
+        # mid-discovery on 2026-11-03, and the restart left automation-helper stopped.
         resources:
           requests:
             cpu: 250m
             memory: 1536Mi
           limits:
-            memory: 2Gi
+            memory: 3Gi
         readinessProbe:
           httpGet:
             path: /homelab/
