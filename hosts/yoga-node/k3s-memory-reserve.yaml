@@ -1,0 +1,26 @@
+# k3s config drop-in for yoga-node: reserve memory for the workloads Kubernetes cannot see.
+#
+# Why this exists: yoga-node also runs Frigate (Docker, ~2.2Gi after two weeks) and the Chromium
+# HA kiosk (~0.5-1Gi), outside Kubernetes. The kubelet reported all 7.5Gi as allocatable, so the
+# scheduler saw the node as ~16% committed and kept packing pods onto it. The kernel then
+# OOM-killed thousands of processes a day (3,648 on 2026-11-02): npm, Plex, whiskey-web, alloy,
+# Grafana all crash-looped, and the node briefly went NotReady on 2026-11-03.
+#
+# What it does: system-reserved takes 3Gi out of allocatable, so the scheduler places pods
+# elsewhere once yoga-node's real headroom is used. The kubelet also caps the kubepods cgroup at
+# capacity minus this reservation, so a runaway pod is OOM-killed inside its own cgroup instead
+# of the kernel killing Frigate or the kiosk. eviction-hard makes the kubelet evict pods before
+# the kernel OOM killer fires. Running pods are not evicted when this is applied; it only
+# affects new scheduling.
+#
+# Install (on yoga-node; restarting the agent keeps pods running):
+#   sudo install -D -m 0644 k3s-memory-reserve.yaml /etc/rancher/k3s/config.yaml.d/50-memory-reserve.yaml
+#   sudo systemctl restart k3s-agent
+#   sudo k3s kubectl describe node yoga-node | grep -A6 Allocatable   # (from kubeprime) memory ~4.4Gi
+#
+# NOTE: this is NOT deployed by CI (ci.yaml only applies k8s manifests and Helm values). The copy
+# in the repo is the source of truth; re-install it by hand if yoga-node is rebuilt. Revisit the
+# 3Gi if Frigate gains cameras or the kiosk is removed.
+kubelet-arg+:
+  - "system-reserved=memory=3Gi"
+  - "eviction-hard=memory.available<256Mi"
