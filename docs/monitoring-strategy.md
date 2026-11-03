@@ -15,11 +15,11 @@ long Claude Code session; kept here so future sessions (human or Claude) can pic
 | | |
 |---|---|
 | Edition / version | Checkmk **Raw** (`2.4.0p37.cre`), site `homelab` |
-| Runs on | `yoga-node`, namespace `monitoring`, NodePort `30500`, manifest [`k8s/configs/checkmk.yaml`](../k8s/configs/checkmk.yaml) |
+| Runs on | `yoga-node`, namespace `monitoring`, NodePort `30500`, manifest [`k8s/configs/checkmk.yaml`](../k8s/configs/checkmk.yaml). Memory request 1.5Gi, limit **3Gi** (idles ~1.7Gi; at the old 2Gi limit it was OOM-killed mid service discovery on 2026-11-03) |
 | LAN UI | `http://192.168.1.249:30500/homelab/` (user `cmkadmin`) |
 | Public UI | `https://cmk.ferrinhouse.org`, NPM proxy host, wildcard cert, Force SSL, HSTS, Block Common Exploits, Websockets, **access list `cmk_access`** (basic auth in front of Checkmk's own login) |
 | API | `http://192.168.1.249:30500/homelab/check_mk/api/1.0`, user `automation` (secret in Bitwarden). LAN only: the public URL's basic auth collides with the `Authorization: Bearer` header |
-| Monitored hosts | kubeprime, kube2, yoga-node, omv-nas, homeassistant (agent); gateway (SNMP-style, no agent). Source list: [`checkmk/hosts.txt`](../checkmk/hosts.txt) |
+| Monitored hosts | kubeprime, kube2, yoga-node, omv-nas, homeassistant (agent); gateway (SNMP-style, no agent). Source list: [`checkmk/hosts.txt`](../checkmk/hosts.txt). `omv-nas` is the host `pinas`, rebuilt 2026-10-29 as a Pi 5 on plain Debian with one NVMe (no OMV); its agent was reinstalled 2026-11-03 (see [`hosts/pinas/README.md`](../hosts/pinas/README.md)). The Pis' agents run in legacy pull mode (socket on 6556, no `cmk-agent-ctl`) |
 | Backup | `checkmk-backup` CronJob, 03:30 daily to the NAS (see README) |
 
 Baseline after Phase 1 (2026-10-15): **132 services, all OK** (was 231 with 3 WARN / 18 UNKNOWN before the
@@ -35,7 +35,7 @@ cleanup). Email notifications deliver (see §3a).
 ### Rules created in Checkmk during the 2026-10-14 session (all via REST API)
 | Rule (ruleset) | Effect | Reason |
 |---|---|---|
-| Disabled services: `omv-nas` / `Postfix status default` | silenced | Postfix not configured, stale `master.pid` from Jun 2025 |
+| Disabled services: `omv-nas` / `Postfix status default` | silenced | Postfix not configured, stale `master.pid` from Jun 2025. Moot since the 2026-10-29 rebuild (no Postfix); harmless to keep |
 | Disabled services: `gateway` / `Filesystem /rom`, `Interface 31`, `Interface 26` | silenced | `/rom` is read-only squashfs (always 100%); 31/26 are unused/virtual wifi netdevs |
 | `memory_linux`: `yoga-node` committed memory warn **250%** / crit **300%** | thresholds raised | k3s overcommit; real usage ~57% |
 | `interfaces`: `gateway` items `09$`, `22$`, `23$`, error levels `{"both": ("perc", (100.0, 100.0))}` | effectively off | wifi radio "input errors" are RF noise (see §5). Up/down still monitored |
@@ -49,27 +49,20 @@ cleanup). Email notifications deliver (see §3a).
 | `extra_service_conf:notes_url` on `kube2` services `^NPM ` | link | Phase 2: -> Grafana *Pods & Containers Deep Dive* (`var-namespace=default&var-container=npm`, metrics and Loki logs) |
 | Notification rule (stock mail rule, edited): host down + service CRIT only for `^NPM `, `^Home Assistant UI`, `^Internet ping`, `^NFS server port`, `^Interface eth1$` | paging scope | Everything else is dashboard-only, per the top-5 decision |
 | Disabled services: `gateway` / `Interface [0-9]+$` | silenced | Index-numbered leftovers (wifi netdevs, `br-iot`). Unused ports `lan1`/`lan4` (no link) are not discovered |
-| **PENDING, not yet applied:** Disabled services: `yoga-node` / `Filesystem /sys/firmware/efi/efivars` | silenced | UEFI variable store, a 184 KiB virtual fs that sits at ~80% by design (WARN since 2026-10-22). See "Pending rule changes" below |
-| **PENDING, not yet applied:** `ntp_time` (NTP time synchronisation) on `omv-nas`: "time since last sync" warn **1 h** / crit **4 h** | thresholds raised | Offset is fine (0.0086 ms); the 17 min warn is shorter than the NAS's sync interval so it flaps. See below |
+| Service discovery on `omv-nas` (2026-11-03, UI, "Accept all") | 23 services | Removed the OMV-era `/srv/dev-disk-by-uuid-*` filesystem/mount-option services, `NTP Time` and Postfix; added `Filesystem /mnt/nvme1`, `Systemd Timesyncd Time`. The 10 `/export/*` binds were not discovered as separate filesystems. Only non-OK: `/mnt/nvme1` WARN at ~82% (warn 80 / crit 90) |
+| Disabled services: `yoga-node` / `Filesystem /sys/firmware/efi/efivars` | silenced | UEFI variable store, a 184 KiB virtual fs that sits at ~80% by design (WARN since 2026-10-22). Created 2026-10-22, **activated 2026-11-03** |
+| ~~`ntp_time` on `omv-nas`: "time since last sync" warn 1 h / crit 4 h~~ | **dropped, never applied** | Was for chrony flapping on the old OMV NAS. The rebuilt NAS uses systemd-timesyncd, discovered 2026-11-03 as `Systemd Timesyncd Time` (own ruleset `timesyncd_time`, default thresholds, OK) |
 
-### Pending rule changes (2026-10-22): apply by hand in the Checkmk UI
+### Rule changes from 2026-10-22: resolved 2026-11-03
 
-Found while checking the dashboard: the only two non-OK services were both noise, not faults. Neither rule is in
-the live site yet. Edit the two **PENDING** rows above (drop the prefix) once applied.
+The efivars rule was created in the UI on 2026-10-22 but sat unactivated (with the yoga-node host edit and its saved
+service list) until the omv-nas rediscovery on 2026-11-03 activated all of them. The planned NTP rule for omv-nas was
+dropped: the NAS no longer runs chrony (see the table above). To silence a virtual filesystem the same way in future:
+*Setup > Services > Disabled services*, **Add rule**, *Explicit hosts* + *Services* = the item, Save, **Activate changes**,
+then accept the vanished service in that host's service discovery.
 
-1. **Silence the efivars filesystem on `yoga-node`**
-   - *Setup > Services > Disabled services* (or search "Disabled services"), **Add rule**.
-   - Conditions: *Explicit hosts* = `yoga-node`; *Services* = `Filesystem /sys/firmware/efi/efivars`.
-   - Save, then **Activate changes**. Same pattern as the `/rom` and `/var/lib/kubelet/pods/` rules above.
-   - If the service lingers, run *Setup > Hosts > yoga-node > Save & run service discovery* and accept removal of
-     the vanished service.
-2. **Relax NTP "time since last sync" on `omv-nas`**
-   - Search rulesets for "NTP time synchronisation" (`ntp_time`; in 2.4 it also covers chrony), **Add rule**.
-   - Conditions: *Explicit hosts* = `omv-nas`.
-   - Value: set *Time since last sync* warn = 1 hour, crit = 4 hours. These are my picks (the old crit was 1 h);
-     leave the offset thresholds alone. If the NAS has no regular sync at all, check `chronyc tracking` on
-     `omv-nas` before loosening further, since the check exists to catch a dead time source.
-   - Save, **Activate changes**, and confirm `NTP Time` returns to OK on the next check cycle.
+**Pending changes are site-wide:** *Activate changes* pushes everything queued by anyone, so check
+*Setup > Activate changes* for unrelated entries before activating.
 
 ---
 
@@ -266,7 +259,9 @@ The TL-SG108E switch (`192.168.8.177`) has no SSH; web UI only.
 - [ ] Consider a second paging path for a total-LAN/cluster failure (see Phase 4); Checkmk runs on yoga-node.
 - [x] Phase 3: Homelab Overview deployed; all nine data panels return data through `grafana_ro` (8 top-5 checks, 6 hosts, 0 problems). Verified via `POST /api/ds/query`.
 - [ ] Phase 3 follow-up: add omv-nas / gateway / homeassistant panels (disk, WAN throughput) and a screenshot-level visual review in the UI.
-- [ ] Apply the two pending rules (efivars filesystem on `yoga-node`, NTP sync thresholds on `omv-nas`) in the Checkmk UI; steps are under "Pending rule changes" in §1.
+- [x] efivars rule on `yoga-node` activated; NTP rule for `omv-nas` dropped after the NAS rebuild (2026-11-03).
+- [x] `omv-nas` after the 2026-10-29 rebuild: agent reinstalled, service discovery redone, NFS watchdog installed (2026-11-03).
+- [ ] Watch `omv-nas` `Filesystem /mnt/nvme1` (~82%, warn 80 / crit 90). It was trending slightly down on 2026-11-03.
 - [ ] Disable SSH password auth on the gateway.
 - [ ] Remove stale `24.220.158.77` from `~/.ssh/known_hosts`.
 - [ ] Optional: remove `CMK_SECRET` from `~/.bash_profile` and use the Bitwarden CLI instead.

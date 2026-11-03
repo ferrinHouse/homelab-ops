@@ -94,9 +94,10 @@ Installed 2026-11-03 (`check-mk-agent` 2.4.0p37, the `.deb` from `http://192.168
 Like the other Pis it runs in legacy pull mode: `check-mk-agent.socket` on TCP 6556, no `cmk-agent-ctl` registration
 (`checkmk/install-agent.sh`'s registration step does not apply on arm64). Checkmk still knows the host as `omv-nas`.
 After a rebuild, run service discovery on `omv-nas` in the Checkmk UI to drop the old `/srv` disk and OMV services.
+Done 2026-11-03 (23 services, `Filesystem /mnt/nvme1` included).
 
 ## Still manual
 
-- A Checkmk check on `192.168.1.253:2049` (Checkmk is configured in its UI; see `docs/monitoring-strategy.md`). The
-  Prometheus alerts in `values-prometheus.yaml` go nowhere while Alertmanager is disabled.
+- The Prometheus alerts in `values-prometheus.yaml` go nowhere while Alertmanager is disabled. NFS reachability is
+  covered by Checkmk's `NFS server port 2049` check on `omv-nas`, which pages (see `docs/monitoring-strategy.md`).
 - Backing up the data off the enclosure.
