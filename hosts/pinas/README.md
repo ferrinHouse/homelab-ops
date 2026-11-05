@@ -66,6 +66,8 @@ Idle CPU temperature was ~69 °C on 2026-11-04 and `vcgencmd get_throttled` repo
 throttled and soft temperature limit hit since boot). No fan is attached. The Pi 5 drives a fan on its own 4-pin
 FAN header from firmware, with no software: fit the official Active Cooler (if the case allows) or a case fan on that
 header, then check `cat /sys/class/thermal/cooling_device0/cur_state` and aim for < 55 °C idle.
+Stopgap since 2026-11-04: an external room fan pointed at the case, which brought idle to ~56 °C. Watch
+Checkmk's `Temperature Zone 0` on `omv-nas` if that fan gets turned off.
 (The old Geekworm X882 fan installer was Pi 4 only and has been removed; it's in git history.)
 
 ## Why the watchdog exists
