@@ -54,6 +54,11 @@ copy the live files back here.
 - Disabled `winbind`, `nmbd`, `samba-ad-dc`, `bluetooth`, `wpa_supplicant`; removed the saved Wi-Fi profile; purged
   `rpi-connect-lite`, `rpicam-apps*`, `udisks2`, `samba-ad-dc`, `winbind`. Restricted the three SMB shares that had
   no `valid users`. `config.txt`: audio, camera and display probing off; `disable-bt`, `disable-wifi`.
+- Patched (24 packages) and updated the bootloader EEPROM (2026-10-30 build), installed `smartmontools` + `nvme-cli`
+  (NVMe: PASSED, 0% used, 0 media errors, 7,714 h) and `unattended-upgrades` limited to Debian-Security origins
+  (the plain `label=Debian` origin is commented out in `/etc/apt/apt.conf.d/50unattended-upgrades`). Rebooted
+  22:48; NFS was back in under a minute, all three nodes reconnected, and Mealie/mealiedb/Postgres restarted once
+  on their own and came back ready.
 
 ## Cooling
 
