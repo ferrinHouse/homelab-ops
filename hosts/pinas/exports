@@ -1,0 +1,13 @@
+# /etc/exports on pinas. Not deployed by CI; edit by hand, then: sudo exportfs -ra
+# pinas NFS exports (fsids kept from the old OMV exports so client file handles stay valid)
+/export 192.168.8.1/16(ro,fsid=0,root_squash,subtree_check,insecure)
+/export/ferrinMedia 192.168.8.1/16(fsid=01c6fcda-0610-4ee9-946a-a149722086a8,rw,async,insecure,no_subtree_check,all_squash,anonuid=1001,anongid=1001)
+/export/plex-config 192.168.8.1/16(fsid=cb9bceca-e3dd-41e7-ac17-e9e4616f0f62,rw,async,insecure,no_subtree_check,all_squash,anonuid=1001,anongid=1001)
+/export/mealie-data 192.168.8.1/16(fsid=5bf29c28-6395-40ce-aa62-a3f720765082,rw,async,insecure,no_subtree_check,no_root_squash)
+/export/npm-data 192.168.8.1/16(fsid=da09f568-bb35-4395-a0da-5e5884a31eb2,rw,async,insecure,no_subtree_check,all_squash,anonuid=1001,anongid=1001)
+/export/whiskey-db 192.168.8.1/16(fsid=87c32115-9608-4107-8101-32c5866d10dd,rw,async,insecure,no_subtree_check,no_root_squash)
+/export/whiskey-photos 192.168.8.1/16(fsid=f120fe69-c9cf-4176-a525-b61ac94e6eb5,rw,async,insecure,no_subtree_check,no_root_squash)
+/export/whiskey-app 192.168.8.1/16(fsid=f72fc8b1-ae99-400b-9cf4-1b7185446a74,rw,async,insecure,no_subtree_check,no_root_squash)
+/export/KubernetesLogs 192.168.8.1/16(fsid=b55c9883-8d2c-4d0f-ac1a-527f138fa89e,rw,async,insecure,no_subtree_check,no_root_squash)
+/export/obsidian_data 192.168.8.1/16(fsid=60b5ca25-e1f8-420f-9838-e4457d73a737,rw,async,insecure,no_subtree_check,no_root_squash)
+/export/travel-db 192.168.8.1/16(fsid=cb1cfc26-7391-4e93-ae7f-3fc2e6cd8d46,rw,async,insecure,no_subtree_check,no_root_squash)

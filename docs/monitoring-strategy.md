@@ -262,6 +262,10 @@ The TL-SG108E switch (`192.168.8.177`) has no SSH; web UI only.
 - [x] efivars rule on `yoga-node` activated; NTP rule for `omv-nas` dropped after the NAS rebuild (2026-11-03).
 - [x] `omv-nas` after the 2026-10-29 rebuild: agent reinstalled, service discovery redone, NFS watchdog installed (2026-11-03).
 - [ ] Watch `omv-nas` `Filesystem /mnt/nvme1` (~82%, warn 80 / crit 90). It was trending slightly down on 2026-11-03.
+- [x] pinas cleanup (2026-11-04): shares moved to `/mnt/nvme1/shares/`, ~32G of leftovers removed, unused services/packages dropped (see `hosts/pinas/README.md`). Rerun service discovery on `omv-nas` (bluetooth/winbind/udisks services are gone).
+- [ ] pinas cooling: idles ~69 °C and has soft-throttled; fit a fan on the Pi 5 FAN header.
+- [ ] pinas `GeneralBackup` SMB share holds plaintext secrets (API tokens, app secrets, BitLocker key, 2FA codes): move to Bitwarden, delete, rotate the tokens.
+- [ ] pinas has no off-device backup of the NVMe (media, Google Takeout, all app data).
 - [ ] Disable SSH password auth on the gateway.
 - [ ] Remove stale `24.220.158.77` from `~/.ssh/known_hosts`.
 - [ ] Optional: remove `CMK_SECRET` from `~/.bash_profile` and use the Bitwarden CLI instead.
