@@ -194,7 +194,7 @@ In Kubernetes, **a `NodePort` is accessible on every node's IP address**, regard
 | **Traefik** | `kube-system` | `kubeprime` | `LoadBalancer` | `80`, `443` | `32662`, `30845` | ServiceLB on every node |
 | **Loki Gateway** | `monitoring` | `kubeprime` | `ClusterIP` | `80` | None (Internal) | `http://loki-gateway.monitoring.svc.cluster.local` |
 | **Loki** | `monitoring` | `yoga-node` | `ClusterIP` | `3100` | None (Internal) | `http://loki.monitoring.svc.cluster.local:3100` |
-| **Prometheus Server** | `monitoring` | `yoga-node` | `ClusterIP` | `80` | None (Internal) | `http://prometheus-server.monitoring.svc.cluster.local` |
+| **Prometheus Server** | `monitoring` | `yoga-node` | `NodePort` | `80` | **`30909`** (LAN only, no auth) | `http://192.168.1.249:30909` (in-cluster: `http://prometheus-server.monitoring.svc.cluster.local`) |
 | **Kubernetes API** | `kube-system` | `kubeprime` | Native API | `6443` | `6443` | `https://kubeprime:6443` |
 
 > Node placement in this table is a snapshot from 2026-09-20; see the note under the architecture diagram.
