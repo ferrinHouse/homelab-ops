@@ -20,7 +20,7 @@
 #      After giving up it does nothing until an operator looks.
 #
 # Everything is logged to the journal as tag "nfs-watchdog" (journalctl -t nfs-watchdog) and to the persistent
-# /var/lib/nfs-watchdog/events.log, because the journal on pinas is in RAM and is lost at every reboot.
+# /var/lib/nfs-watchdog/events.log, a small persistent record that survives journal rotation.
 # Set NOTIFY_CMD in /etc/default/nfs-watchdog to be told (it receives the message as $1).
 #
 # Dry run (log what would happen, change nothing):  sudo DRY_RUN=1 /usr/local/bin/nfs-watchdog.sh
@@ -51,7 +51,7 @@ DRY_RUN="${DRY_RUN:-0}"
 # ---------------------------------------------------------------------------------------------
 
 TAG=nfs-watchdog
-# The journal on pinas lives in RAM (folder2ram), so also keep a persistent, size-capped event log on the SD card.
+# Also keep a size-capped event log on the SD card: a short incident record that outlives journal rotation.
 log()  {
     logger -t "$TAG" -p "${2:-daemon.info}" -- "$1"; echo "$1" >&2
     [ "$DRY_RUN" = 1 ] && return 0
