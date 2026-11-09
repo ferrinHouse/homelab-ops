@@ -11,3 +11,4 @@
 /export/KubernetesLogs 192.168.8.1/16(fsid=b55c9883-8d2c-4d0f-ac1a-527f138fa89e,rw,async,insecure,no_subtree_check,no_root_squash)
 /export/obsidian_data 192.168.8.1/16(fsid=60b5ca25-e1f8-420f-9838-e4457d73a737,rw,async,insecure,no_subtree_check,no_root_squash)
 /export/travel-db 192.168.8.1/16(fsid=cb1cfc26-7391-4e93-ae7f-3fc2e6cd8d46,rw,async,insecure,no_subtree_check,no_root_squash)
+/export/travel-uploads 192.168.8.1/16(fsid=56dc1a0e-aa79-4bf8-8979-3cd8dab0218a,rw,async,insecure,no_subtree_check,no_root_squash)

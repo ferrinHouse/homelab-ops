@@ -12,3 +12,4 @@ UUID=be77ee55-2852-4994-ae9f-26b76de17318  /mnt/nvme1  ext4  defaults,noatime,no
 /mnt/nvme1/shares/KubernetesLogs  /export/KubernetesLogs  none  bind,nofail,x-systemd.requires-mounts-for=/mnt/nvme1  0  0
 /mnt/nvme1/shares/obsidian_data  /export/obsidian_data  none  bind,nofail,x-systemd.requires-mounts-for=/mnt/nvme1  0  0
 /mnt/nvme1/shares/travel-db  /export/travel-db  none  bind,nofail,x-systemd.requires-mounts-for=/mnt/nvme1  0  0
+/mnt/nvme1/shares/travel-uploads  /export/travel-uploads  none  bind,nofail,x-systemd.requires-mounts-for=/mnt/nvme1  0  0
