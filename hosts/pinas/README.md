@@ -34,6 +34,7 @@ handles stayed valid across the rebuild and the 2026-11-04 move; don't change th
 | KubernetesLogs | yes | yes | Dynamic NFS provisioner (Grafana, Prometheus, Loki, Checkmk backups) |
 | obsidian_data | yes | | Obsidian / CouchDB |
 | travel-db | yes | yes | Family Travel site |
+| travel-uploads | yes | | Family Travel photos (scrapbook), owned by 1001:1001 |
 | GeneralBackup | | yes | Personal files, Google Takeout (1.1T) |
 | moreMedia | | yes | Old media / container data |
 

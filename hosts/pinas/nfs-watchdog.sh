@@ -34,7 +34,7 @@ set -u
 # Since the 2026-10-29 rebuild this is the single NVMe on the Pi 5's PCIe (/mnt/nvme1) holding every export.
 # (Before: two SATA disks 44477d40-... and 7462ec5d-... behind the USB bridge, mounted under /srv by OMV.)
 DISKS="be77ee55-2852-4994-ae9f-26b76de17318"
-EXPORTS="ferrinMedia plex-config mealie-data npm-data whiskey-db whiskey-photos whiskey-app KubernetesLogs obsidian_data travel-db"
+EXPORTS="ferrinMedia plex-config mealie-data npm-data whiskey-db whiskey-photos whiskey-app KubernetesLogs obsidian_data travel-db travel-uploads"
 # Kernel log prefix of a USB enclosure (e.g. "usb 2-2" matches "usb 2-2: USB disconnect"). Empty for the
 # PCIe NVMe: recovery then only waits for the disk to be visible, not for a quiet USB bus.
 USB_DEV=""
