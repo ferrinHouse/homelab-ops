@@ -166,7 +166,7 @@ spec:
             # Your phone's notify service, without the "notify." prefix
             # (HA > Developer tools > Actions, search "notify.mobile_app").
             - name: HA_NOTIFY_SERVICE
-              value: "mobile_app_CHANGE_ME"
+              value: "mobile_app_mike_s_cell_phone"   # device "Mike's Cell Phone"
             # Laptop running Ollama with OLLAMA_HOST=0.0.0.0 (docs/it-agent.md). Empty = no AI summary.
             - name: OLLAMA_URL
               value: "http://192.168.1.11:11434"
