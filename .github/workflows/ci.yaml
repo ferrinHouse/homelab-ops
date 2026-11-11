@@ -8,6 +8,7 @@ on:
       - 'k8s/monitoring/**'
       - 'k8s/storage/**'
       - 'k8s/configs/**'
+      - 'agent/**'
       - '.github/workflows/ci.yaml'
   workflow_dispatch:
 
@@ -128,6 +129,24 @@ jobs:
           kubectl apply -f k8s/configs/familyTravel/familyTravel.yaml
           kubectl apply -f k8s/configs/checkmk.yaml
           kubectl apply -f k8s/configs/checkmk-backup.yaml
+
+      # IT agent (docs/it-agent.md). The code ships as a ConfigMap (stdlib Python on the stock
+      # python image, so there is no image build). Secret + code must exist before the pod starts.
+      # Only the .py files go in: tests/ and anything else in the folder are left out.
+      - name: Deploy IT agent
+        run: |
+          kubectl create namespace it-agent --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret generic it-agent-secrets \
+            --namespace it-agent \
+            --from-literal=ha-token="${{ secrets.IT_AGENT_HA_TOKEN }}" \
+            --from-literal=webhook-secret="${{ secrets.IT_AGENT_WEBHOOK_SECRET }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create configmap it-agent-code \
+            --namespace it-agent \
+            $(for f in agent/it-agent/*.py; do printf -- '--from-file=%s ' "$f"; done) \
+            --dry-run=client -o yaml | kubectl apply -f -
+          kubectl apply -f k8s/configs/it-agent.yaml
+          kubectl rollout restart deployment/it-agent -n it-agent
 
       - name: Roll Out Secret Changes
         run: |
