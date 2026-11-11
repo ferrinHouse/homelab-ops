@@ -1,0 +1,278 @@
+# IT agent: investigates Grafana alerts, proposes fixes as Home Assistant notifications with
+# [Fix once] [Fix always] [I'll handle it] buttons, runs the approved fix, and checks it worked.
+# Code: agent/it-agent/ (shipped as ConfigMap it-agent-code by ci.yaml). Docs: docs/it-agent.md.
+#
+# Applied by ci.yaml AFTER it creates:
+#   - ConfigMap it-agent-code   (the Python files)
+#   - Secret    it-agent-secrets (ha-token, webhook-secret from GitHub secrets
+#                                 IT_AGENT_HA_TOKEN and IT_AGENT_WEBHOOK_SECRET)
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: it-agent
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: it-agent
+  namespace: it-agent
+---
+# Read-only, cluster-wide: what the agent needs to investigate.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: it-agent-read
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "events", "nodes"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: it-agent-read
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: it-agent-read
+subjects:
+  - kind: ServiceAccount
+    name: it-agent
+    namespace: it-agent
+---
+# The only two write actions: delete a pod, patch a deployment (rollout restart).
+# Granted per namespace with a RoleBinding below, so RBAC enforces the same allowlist as
+# ALLOWED_NAMESPACES. kube-system, storage and it-agent itself are deliberately not included.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: it-agent-fix
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: it-agent-fix
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: it-agent-fix
+subjects:
+  - kind: ServiceAccount
+    name: it-agent
+    namespace: it-agent
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: it-agent-fix
+  namespace: monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: it-agent-fix
+subjects:
+  - kind: ServiceAccount
+    name: it-agent
+    namespace: it-agent
+---
+# "Fix always" rules. No `data:` here on purpose: kubectl apply then leaves the rules the agent
+# writes alone. To revoke a rule: kubectl edit configmap it-agent-state -n it-agent
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: it-agent-state
+  namespace: it-agent
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: it-agent-state
+  namespace: it-agent
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["it-agent-state"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: it-agent-state
+  namespace: it-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: it-agent-state
+subjects:
+  - kind: ServiceAccount
+    name: it-agent
+    namespace: it-agent
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: it-agent
+  namespace: it-agent
+  labels:
+    app: it-agent
+spec:
+  replicas: 1            # incidents live in memory; do not scale out
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: it-agent
+  template:
+    metadata:
+      labels:
+        app: it-agent
+    spec:
+      serviceAccountName: it-agent
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+      containers:
+        - name: it-agent
+          # Official multi-arch image (arm64 Pis and amd64 yoga-node); the code is mounted, not built in.
+          image: python:3.12-slim
+          command: ["python", "-u", "/app/main.py"]
+          ports:
+            - name: alerts
+              containerPort: 8080
+            - name: decisions
+              containerPort: 8081
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: HA_URL
+              value: "http://192.168.1.254:8123"
+            # Your phone's notify service, without the "notify." prefix
+            # (HA > Developer tools > Actions, search "notify.mobile_app").
+            - name: HA_NOTIFY_SERVICE
+              value: "mobile_app_CHANGE_ME"
+            # Laptop running Ollama with OLLAMA_HOST=0.0.0.0 (docs/it-agent.md). Empty = no AI summary.
+            - name: OLLAMA_URL
+              value: "http://192.168.1.11:11434"
+            - name: OLLAMA_MODEL
+              value: "qwen3"
+            - name: ALLOWED_NAMESPACES
+              value: "default,monitoring"     # keep in step with the it-agent-fix RoleBindings
+            - name: MAX_FIXES_PER_HOUR
+              value: "2"
+            - name: PROPOSAL_TTL_SEC
+              value: "7200"
+            - name: VERIFY_DELAY_SEC
+              value: "180"
+            # "false" = approved fixes are only announced, never run.
+            - name: EXECUTE_FIXES
+              value: "true"
+            - name: HA_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: it-agent-secrets
+                  key: ha-token
+            - name: WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: it-agent-secrets
+                  key: webhook-secret
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          # Both probes use the decisions port: the NetworkPolicy limits the alerts port to the
+          # monitoring namespace, which could block kubelet probes from the node.
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: decisions
+            periodSeconds: 30
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: decisions
+            periodSeconds: 60
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: code
+              mountPath: /app
+              readOnly: true
+      volumes:
+        - name: code
+          configMap:
+            name: it-agent-code
+---
+# Grafana -> agent, in-cluster only.
+apiVersion: v1
+kind: Service
+metadata:
+  name: it-agent
+  namespace: it-agent
+spec:
+  type: ClusterIP
+  selector:
+    app: it-agent
+  ports:
+    - name: alerts
+      port: 8080
+      targetPort: alerts
+---
+# Home Assistant -> agent (button presses). Every request needs the X-Agent-Secret header.
+apiVersion: v1
+kind: Service
+metadata:
+  name: it-agent-decisions
+  namespace: it-agent
+spec:
+  type: NodePort
+  selector:
+    app: it-agent
+  ports:
+    - name: decisions
+      port: 8081
+      targetPort: decisions
+      nodePort: 30985
+---
+# Only Grafana's namespace may post alerts; the decision port is open (it checks the secret).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: it-agent
+  namespace: it-agent
+spec:
+  podSelector:
+    matchLabels:
+      app: it-agent
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 8080
+    - ports:
+        - port: 8081

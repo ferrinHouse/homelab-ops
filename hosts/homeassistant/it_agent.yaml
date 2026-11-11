@@ -1,0 +1,43 @@
+# Home Assistant package for the homelab IT agent (docs/it-agent.md).
+# NOT deployed by CI: copy it to /config/packages/it_agent.yaml on Home Assistant (192.168.1.254)
+# and make sure configuration.yaml has:
+#
+#   homeassistant:
+#     packages: !include_dir_named packages
+#
+# and /config/secrets.yaml has (the same value as the IT_AGENT_WEBHOOK_SECRET GitHub secret):
+#
+#   it_agent_secret: "<long random string>"
+#
+# Then restart Home Assistant (or reload YAML: REST commands + automations).
+#
+# What it does: when you tap a button on an IT-agent notification, the companion app fires a
+# mobile_app_notification_action event. This automation forwards only ITAGENT_* button ids to
+# the agent. The button id names an incident and a choice; it never carries a command.
+
+rest_command:
+  it_agent_decision:
+    # Any k3s node IP works for a NodePort; kubeprime is the control plane.
+    url: "http://192.168.1.247:30985/decision"
+    method: POST
+    content_type: "application/json"
+    headers:
+      X-Agent-Secret: !secret it_agent_secret
+    payload: '{"action": "{{ action }}"}'
+    timeout: 20
+
+automation:
+  - id: it_agent_forward_notification_button
+    alias: "IT agent: forward notification button"
+    description: "Sends Fix once / Fix always / I'll handle it taps to the homelab IT agent."
+    mode: queued
+    triggers:
+      - trigger: event
+        event_type: mobile_app_notification_action
+    conditions:
+      - condition: template
+        value_template: "{{ (trigger.event.data.action | default('')).startswith('ITAGENT_') }}"
+    actions:
+      - action: rest_command.it_agent_decision
+        data:
+          action: "{{ trigger.event.data.action }}"

@@ -222,6 +222,7 @@ In Kubernetes, **a `NodePort` is accessible on every node's IP address**, regard
 
   > [!NOTE]
   > **Known blind spot:** alerts are evaluated and sent by Grafana, which is a single pod. If Grafana itself, or the node it runs on, goes down, nothing is sent. Catching that needs an external heartbeat (e.g. a dead-man's-switch service), which is not set up.
+- **IT agent**: every Homelab alert is also sent to the `it-agent` service, which investigates the live cluster and proposes a fix as a Home Assistant phone notification with *Fix once / Fix always / I'll handle it* buttons, then checks the fix worked. See [`docs/it-agent.md`](docs/it-agent.md).
 - **Grafana Alloy**: Deployed as a `DaemonSet` running on all nodes (`kubeprime`, `kube2`, `yoga-node`). It tails all pod logs and extracts structured JSON fields (`Level`, `Message`, `WhiskeyName`, `Query`) for the Whiskey Tracker app before shipping to Loki.
 
 ### 2. Application Services (`default` namespace)
