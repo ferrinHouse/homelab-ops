@@ -1,0 +1,68 @@
+# Read-only identity for Claude Code's kubectl use.
+# k8s/rbac/ is NOT watched by ci.yaml: this file is a record. It was applied once by hand
+# with the admin context (2026-11-10):
+#   kubectl --context default apply -f k8s/rbac/claude-readonly.yaml
+# The client side is ~/.kube/claude-ro.yaml (context homelab-ro, built from the token
+# below) on the Windows workstation, with Claude Code's KUBECONFIG pointed at it.
+# Revoke: kubectl delete -f this file (deleting the Secret alone kills the token).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: claude-readonly
+  namespace: kube-system
+---
+# Long-lived token (no expiry). Delete this Secret to revoke it.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: claude-readonly-token
+  namespace: kube-system
+  annotations:
+    kubernetes.io/service-account.name: claude-readonly
+type: kubernetes.io/service-account-token
+---
+# Built-in "view": read nearly everything namespaced, but NOT Secrets.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: claude-readonly-view
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+  - kind: ServiceAccount
+    name: claude-readonly
+    namespace: kube-system
+---
+# "view" omits cluster-scoped objects; add read on the ones triage needs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: claude-readonly-cluster
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "persistentvolumes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: claude-readonly-cluster
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: claude-readonly-cluster
+subjects:
+  - kind: ServiceAccount
+    name: claude-readonly
+    namespace: kube-system

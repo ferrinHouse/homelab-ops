@@ -104,6 +104,15 @@ YAML is valid, check the Helm chart's values schema (`helm show values <chart>`)
 setting, and reason about which of the three deploy stages in `ci.yaml` (Helm upgrades → secret
 create/apply → `kubectl apply` of `k8s/configs/**`) your change falls into.
 
+## Claude's kubectl access is read-only
+
+On the Windows workstation, Claude Code's `KUBECONFIG` points at `~/.kube/claude-ro.yaml` (context
+`homelab-ro`, ServiceAccount `kube-system/claude-readonly`, defined in
+[`k8s/rbac/claude-readonly.yaml`](k8s/rbac/claude-readonly.yaml)). It can read everything except Secrets
+and cannot write or exec. `k8s/rbac/` is not deployed by CI. For a write, either propose the change
+through a PR or run the command with `--kubeconfig ~/.kube/config` (the admin config), which prompts
+the user for approval.
+
 ## Secrets
 
 Never commit credential values. Manifests reference secrets via `secretKeyRef` only; the actual values are
