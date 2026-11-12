@@ -146,7 +146,8 @@ class AgentTest(unittest.TestCase):
         self.assertEqual(self.store.rules,
                          {"Pod restarting repeatedly|rollout_restart|default/Deployment/plex"})
 
-        # New pod name after the restart, same controller: auto-fixed without asking.
+        self.scheduled.pop()()  # the 3-minute check: healthy, incident becomes "fixed"
+        # Breaks again later with a new pod name, same controller: auto-fixed without asking.
         self.k8s.pods[("default", "plex-xyz")] = crashing_pod(name="plex-xyz")
         self.clock.t += 600
         self.agent.handle_grafana({"alerts": [alert(pod="plex-xyz")]})
@@ -162,9 +163,68 @@ class AgentTest(unittest.TestCase):
             self.k8s.pods[("default", pod)] = crashing_pod(name=pod)
             self.clock.t += 60
             self.agent.handle_grafana({"alerts": [alert(pod=pod)]})
+            while self.scheduled:
+                self.scheduled.pop()()
         self.assertEqual(len(self.k8s.calls), 2)
         self.assertIn("asking instead", self.phone.sent[-1]["message"])
         self.assertEqual(len(self.phone.sent[-1]["actions"]), 3)
+
+    # --- regressions from the 2026-11-12 live test (it-agent-test restarted 3x in 17 min) ---
+
+    def test_two_alerts_on_one_workload_give_one_proposal(self):
+        self.agent.handle_grafana({"alerts": [alert(), alert(name="Pod running but not Ready")]})
+        proposals = [m for m in self.phone.sent if m["actions"]]
+        self.assertEqual(len(proposals), 1)
+
+    def test_quiet_after_still_failing_even_for_new_pod_and_other_alert(self):
+        _, buttons = self._proposal()
+        self.agent.decide(buttons["Fix once"])
+        self.k8s.apps[("default", "Deployment", "plex")]["status"]["readyReplicas"] = 0
+        self.scheduled.pop()()
+        self.assertTrue(self.phone.sent[-1]["title"].startswith("❌ Still failing"))
+        sent_before = len(self.phone.sent)
+
+        # The restart made a new pod, which fires both alerts again 10 minutes later.
+        self.k8s.pods[("default", "plex-new")] = crashing_pod(name="plex-new")
+        self.clock.t += 600
+        self.agent.handle_grafana({"alerts": [alert(pod="plex-new"),
+                                              alert(name="Pod running but not Ready", pod="plex-new")]})
+        self.assertEqual(len(self.phone.sent), sent_before, "must not re-propose after handing it back")
+        self.assertEqual(len(self.k8s.calls), 1)
+
+    def test_quiet_window_ends(self):
+        _, buttons = self._proposal()
+        self.agent.decide(buttons["I'll handle it"])
+        self.k8s.pods[("default", "plex-new")] = crashing_pod(name="plex-new")
+        self.clock.t += self.cfg.dedup_window_sec + 1
+        self.agent.handle_grafana({"alerts": [alert(pod="plex-new")]})
+        self.assertEqual(len(self.phone.sent[-1]["actions"]), 3)
+
+    def test_rate_limit_is_per_workload_across_alert_types(self):
+        self.store.rules = {
+            "Pod restarting repeatedly|rollout_restart|default/Deployment/plex",
+            "Pod running but not Ready|rollout_restart|default/Deployment/plex",
+        }
+        self.agent = self._agent()
+        names = ["Pod running but not Ready", "Pod restarting repeatedly", "Pod running but not Ready"]
+        for i, name in enumerate(names):
+            pod = f"plex-{i}"
+            self.k8s.pods[("default", pod)] = crashing_pod(name=pod)
+            self.clock.t += 300
+            self.agent.handle_grafana({"alerts": [alert(name=name, pod=pod)]})
+            while self.scheduled:
+                self.scheduled.pop()()  # each restart "works", so no quiet period
+        self.assertEqual(len(self.k8s.calls), 2, "2 fixes per workload per hour, whatever the alert")
+        self.assertIn("asking instead", self.phone.sent[-1]["message"])
+
+    def test_ill_handle_it_on_still_failing_report(self):
+        _, buttons = self._proposal()
+        self.agent.decide(buttons["Fix once"])
+        self.k8s.apps[("default", "Deployment", "plex")]["status"]["readyReplicas"] = 0
+        self.scheduled.pop()()
+        deny = self.phone.sent[-1]["actions"][0][0]
+        self.assertEqual(self.agent.decide(deny), (200, "denied"))
+        self.assertEqual(len(self.k8s.calls), 1)
 
     def test_deny_runs_nothing(self):
         _, buttons = self._proposal()

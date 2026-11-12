@@ -74,25 +74,36 @@ class Agent:
                      finding.alertname, finding.subject, "; ".join(finding.facts))
             return
 
-        try:
-            explanation = self.explainer.explain(finding)
-        except Exception:  # noqa: BLE001
-            log.exception("explainer failed")
-            explanation = None
-
-        inc = Incident(secrets.token_hex(4), dedup, finding, explanation, self.clock())
+        inc = Incident(secrets.token_hex(4), dedup, finding, None, self.clock(),
+                       status="pending" if finding.fix else "info")
+        if finding.fix:
+            inc.target = finding.fix.target()
+            inc.fix_key = playbooks.rule_key(finding.alertname, finding.fix)
+        # Check and register in one step, so two alerts about the same workload (e.g. "restarting"
+        # and "not Ready" for one crashing pod, or the replacement pod after a restart) can never
+        # both produce a proposal.
         with self.state.lock:
+            if inc.target:
+                existing = self.state.incident_for_target(inc.target, self.clock(),
+                                                          self.cfg.dedup_window_sec)
+                if existing:
+                    log.info("%s on %s: %s is already covered by incident %s (%s); not proposing again",
+                             finding.alertname, finding.subject, inc.target, existing.id, existing.status)
+                    return
             self.state.incidents[inc.id] = inc
 
+        try:
+            inc.explanation = self.explainer.explain(finding)
+        except Exception:  # noqa: BLE001
+            log.exception("explainer failed")
+
         if not finding.fix:
-            inc.status = "info"
             self._send(inc, f"⚠️ {finding.alertname}", self._body(inc, footer=self._no_fix_footer(finding)))
             return
 
-        inc.fix_key = playbooks.rule_key(finding.alertname, finding.fix)
         note = ""
         if inc.fix_key in self.state.always_rules:
-            if self.state.can_fix(inc.fix_key, self.clock(), self.cfg.max_fixes_per_hour):
+            if self.state.can_fix(inc.target, self.clock(), self.cfg.max_fixes_per_hour):
                 inc.auto = True
                 inc.status = "fixing"
                 self._execute(inc)
@@ -133,6 +144,12 @@ class Agent:
             inc = self.state.incidents.get(inc_id)
             if inc is None:
                 return 404, "no such incident (the agent may have restarted)"
+            # "I'll handle it" is also offered on failed / still-failing reports.
+            if decision == "deny" and inc.status in ("still_failing", "failed"):
+                inc.status = "denied"
+                self._send(inc, f"👍 Yours: {inc.finding.alertname}",
+                           f"OK, {inc.finding.subject} is yours. I'll stay quiet about it for now.")
+                return 200, "denied"
             if inc.status != "pending":
                 return 409, f"incident is already {inc.status}"
             if self.clock() - inc.created > self.cfg.proposal_ttl_sec:
@@ -149,7 +166,7 @@ class Agent:
                            f'({{namespace="it-agent"}}, incident {inc.id}).')
                 return 200, "denied"
 
-            if not self.state.can_fix(inc.fix_key, self.clock(), self.cfg.max_fixes_per_hour):
+            if not self.state.can_fix(inc.target, self.clock(), self.cfg.max_fixes_per_hour):
                 self._send(inc, f"⛔ Rate limit: {inc.finding.alertname}",
                            f"{inc.finding.fix.target()} was already fixed "
                            f"{self.cfg.max_fixes_per_hour}x in the last hour. Not running it again.",
@@ -179,7 +196,8 @@ class Agent:
             self._send(inc, f"❌ Fix failed: {inc.finding.alertname}",
                        f"{fix.describe()} failed: {err}", actions=[(f"ITAGENT_DENY_{inc.id}", "I'll handle it")])
             return
-        self.state.record_fix(inc.fix_key, self.clock())
+        # Rate limit is per workload, not per alert: two alerts must not double the allowance.
+        self.state.record_fix(inc.target, self.clock())
         log.info("incident %s: ran %s (%s)", inc.id, fix.describe(), how)
         minutes = max(1, round(self.cfg.verify_delay_sec / 60))
         self._send(inc, f"🔧 Fixing: {inc.finding.alertname}",

@@ -21,7 +21,14 @@ class Incident:
     created: float
     status: str = "pending"   # pending|fixing|fixed|still_failing|failed|denied|expired|resolved|info|dry_run
     fix_key: str | None = None
+    target: str | None = None  # the workload a fix acts on, e.g. default/Deployment/plex
     auto: bool = False
+
+
+# Statuses that keep the agent quiet about a workload for the dedup window: it is being handled,
+# or the agent already handed it to you. "fixed" and "expired" do not, so a workload that breaks
+# again later gets a new proposal (or an automatic fix, within the rate limit).
+QUIET_STATUSES = ("pending", "fixing", "still_failing", "denied", "failed", "dry_run")
 
 
 class MemoryStore:
@@ -75,6 +82,16 @@ class State:
     def record_fix(self, key, now):
         with self.lock:
             self.fix_times.setdefault(key, []).append(now)
+
+    def incident_for_target(self, target, now, window):
+        """An incident that already covers this workload, from any alert, or None."""
+        with self.lock:
+            for inc in self.incidents.values():
+                if inc.target != target or inc.status not in QUIET_STATUSES:
+                    continue
+                if inc.status in ("pending", "fixing") or now - inc.created < window:
+                    return inc
+            return None
 
     def blocks_new(self, dedup, now, window):
         """True if this alert already has an incident that should suppress a new one."""

@@ -29,7 +29,8 @@ Everything runs locally and costs nothing: no cloud model, no API credits.
 | Fixes | `rollout restart` of the owning Deployment; delete the pod for StatefulSet/DaemonSet/plain ReplicaSet |
 | Namespaces it may fix | `default`, `monitoring` (env `ALLOWED_NAMESPACES` **and** the `it-agent-fix` RoleBindings) |
 | Advice only | Every other Homelab alert (node not Ready, disk/memory low, scrape target down, Checkmk unreachable), pods in other namespaces, bare pods, Jobs |
-| Rate limit | 2 fixes per controller per hour, for approved and fix-always alike; past that it asks you |
+| Rate limit | 2 fixes per workload (controller) per hour, whichever alert triggered them, for approved and fix-always alike; past that it asks you |
+| One proposal per workload | A crashing pod usually fires both pod alerts; you get one proposal. After a fix reports ❌ still failing, or you tap *I'll handle it*, the agent stays quiet about that workload for 6h (`DEDUP_WINDOW_SEC`), including for the replacement pod |
 | Never | Edits manifests, changes resource limits, touches nodes/NFS/kube-system, or runs anything the AI wrote |
 
 OOMKilled pods get a hint to raise the memory limit in the repo; the restart is only temporary relief.
