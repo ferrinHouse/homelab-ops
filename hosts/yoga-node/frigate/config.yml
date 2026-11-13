@@ -86,6 +86,16 @@ cameras:
         - cat
     detect:
       fps: 5
+    motion:
+      mask:
+        sky_trees:
+          friendly_name: Sky and tree canopy
+          enabled: true
+          coordinates: 0,0,1,0,1,0.3,0,0.3
+        ornamental_grass:
+          friendly_name: Ornamental grass
+          enabled: true
+          coordinates: 0.67,1,0.67,0.58,0.82,0.4,0.92,0.33,1,0.33,1,1
   wyzecam2:
     ffmpeg:
       inputs:
@@ -115,18 +125,6 @@ cameras:
       motion:
         days: 0
 
-    objects:
-      mask:
-        street:
-          friendly_name: Street
-          enabled: true
-          coordinates: 0.002,0.441,0.988,0.503,0.997,0.007,0.003,0.011
-    motion:
-      mask:
-        motion_mask_1:
-          friendly_name: Motion Mask 1
-          enabled: true
-          coordinates: 0.997,0.993,0.991,0.331,0.712,0.601,0.793,0.993
   wyzecam3:
     ffmpeg:
       inputs:
@@ -271,3 +269,17 @@ lpr:
   enabled: true
 detect:
   enabled: true
+camera_groups:
+  Outside:
+    order: 1
+    icon: LuLogOut
+    cameras:
+      - wyzecam1
+      - vivint_doorbell
+      - vivint_driveway
+  Inside:
+    order: 2
+    icon: LuLogIn
+    cameras:
+      - wyzecam2
+      - master_bedroom
