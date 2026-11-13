@@ -107,7 +107,8 @@ Wyze cameras are deployed on the isolated **IoT subnet (`10.10.10.0/24`)** runni
 | `WyzeCam1` | `10.10.10.198` | IoT (VLAN 10) | Thingino Dual-Stream RTSP |
 | `WyzeCam2` | `10.10.10.111` | IoT (VLAN 10) | Thingino Dual-Stream RTSP |
 | `WyzeCam3` | `10.10.10.226` | IoT (VLAN 10) | Thingino Dual-Stream RTSP |
-| *Cell Phones (x3)* | *DHCP on IoT* | IoT (VLAN 10) | Future RTSP/WebRTC feeds |
+| `master_bedroom` | `10.10.10.102` | IoT (VLAN 10) | Master bedroom — Android IP Webcam Pro, single RTSP stream `:8080/h264_ulaw.sdp` (1080p30, detect + record) |
+| *Cell Phones (x2)* | *DHCP on IoT* | IoT (VLAN 10) | Future RTSP/WebRTC feeds |
 
 ---
 
