@@ -6,7 +6,7 @@ mqtt:
   host: 192.168.1.254
   port: 1883
   user: mqtt
-  password: "{FRIGATE_MQTT_PASSWORD}"
+  password: '{FRIGATE_MQTT_PASSWORD}'
 
 detectors:
   ov:
@@ -26,7 +26,7 @@ ffmpeg:
 go2rtc:
   homeassistant:
     url: http://192.168.1.254:8123
-    token: "{FRIGATE_HASS_TOKEN}"
+    token: '{FRIGATE_HASS_TOKEN}'
 
   streams:
     wyzecam1_main:
@@ -49,6 +49,10 @@ go2rtc:
       - rtsp://user:{FRIGATE_VIVINT_RTSP_PASSWORD}@10.10.10.218:8554/Video-108
     vivint_driveway_sub:
       - rtsp://user:{FRIGATE_VIVINT_RTSP_PASSWORD}@10.10.10.218:8554/Video-108_SD
+    # Android phone running IP Webcam Pro (single H.264 1080p30 stream, no auth).
+    # h264_ulaw.sdp avoids the app's malformed AAC frames seen on h264_aac.sdp.
+    master_bedroom:
+      - rtsp://10.10.10.102:8080/h264_ulaw.sdp
 
 cameras:
   wyzecam1:
@@ -62,11 +66,6 @@ cameras:
           input_args: preset-rtsp-restream
           roles:
             - record
-    detect:
-      enabled: true
-      width: 640
-      height: 360
-      fps: 15
     record:
       enabled: true
       alerts:
@@ -80,6 +79,13 @@ cameras:
       motion:
         days: 0
 
+    objects:
+      track:
+        - person
+        - dog
+        - cat
+    detect:
+      fps: 5
   wyzecam2:
     ffmpeg:
       inputs:
@@ -95,7 +101,7 @@ cameras:
       enabled: true
       width: 640
       height: 360
-      fps: 15
+      fps: 5
     record:
       enabled: true
       alerts:
@@ -109,6 +115,18 @@ cameras:
       motion:
         days: 0
 
+    objects:
+      mask:
+        street:
+          friendly_name: Street
+          enabled: true
+          coordinates: 0.002,0.441,0.988,0.503,0.997,0.007,0.003,0.011
+    motion:
+      mask:
+        motion_mask_1:
+          friendly_name: Motion Mask 1
+          enabled: true
+          coordinates: 0.997,0.993,0.991,0.331,0.712,0.601,0.793,0.993
   wyzecam3:
     ffmpeg:
       inputs:
@@ -124,7 +142,7 @@ cameras:
       enabled: true
       width: 640
       height: 360
-      fps: 15
+      fps: 5
     record:
       enabled: true
       alerts:
@@ -142,7 +160,9 @@ cameras:
     ffmpeg:
       inputs:
         - path: rtsp://127.0.0.1:8554/vivint_doorbell_sub?video=copy
-          input_args: -avoid_negative_ts make_zero -fflags +genpts+discardcorrupt -use_wallclock_as_timestamps 1 -rtsp_transport tcp -timeout 10000000
+          input_args: -avoid_negative_ts make_zero -fflags 
+            +genpts+discardcorrupt -use_wallclock_as_timestamps 1 
+            -rtsp_transport tcp -timeout 10000000
           roles:
             - detect
         - path: rtsp://127.0.0.1:8554/vivint_doorbell_main?video=copy
@@ -153,7 +173,7 @@ cameras:
       enabled: true
       width: 512
       height: 512
-      fps: 15
+      fps: 5
     record:
       enabled: true
       alerts:
@@ -167,11 +187,16 @@ cameras:
       motion:
         days: 0
 
+    objects:
+      track:
+        - person
   vivint_driveway:
     ffmpeg:
       inputs:
         - path: rtsp://127.0.0.1:8554/vivint_driveway_sub?video=copy
-          input_args: -avoid_negative_ts make_zero -fflags +genpts+discardcorrupt -use_wallclock_as_timestamps 1 -rtsp_transport tcp -timeout 10000000
+          input_args: -avoid_negative_ts make_zero -fflags 
+            +genpts+discardcorrupt -use_wallclock_as_timestamps 1 
+            -rtsp_transport tcp -timeout 10000000
           roles:
             - detect
         - path: rtsp://127.0.0.1:8554/vivint_driveway_main?video=copy
@@ -182,7 +207,7 @@ cameras:
       enabled: true
       width: 720
       height: 400
-      fps: 15
+      fps: 5
     record:
       enabled: true
       alerts:
@@ -196,6 +221,40 @@ cameras:
       motion:
         days: 0
 
+    objects:
+      mask:
+        street:
+          friendly_name: Street
+          enabled: true
+          coordinates: 0.266,0.202,1,0.547,0.996,0.009,0.262,0.008
+
+  # IP Webcam Pro has only one stream, so it feeds both roles; Frigate
+  # downscales the 1080p feed to 640x360 for detection (VAAPI decode).
+  master_bedroom:
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/master_bedroom?video=copy
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+            - record
+    detect:
+      enabled: true
+      width: 640
+      height: 360
+      fps: 5
+    record:
+      enabled: true
+      alerts:
+        retain:
+          days: 14
+      detections:
+        retain:
+          days: 14
+      continuous:
+        days: 3
+      motion:
+        days: 0
 objects:
   track:
     - person
@@ -206,3 +265,9 @@ objects:
 telemetry:
   version_check: false
 version: 0.18-0
+face_recognition:
+  enabled: true
+lpr:
+  enabled: true
+detect:
+  enabled: true
