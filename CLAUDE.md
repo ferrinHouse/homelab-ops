@@ -6,9 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `homelab-ops` is the infrastructure-as-config repo for the Ferrin Homelab: Kubernetes manifests and Helm
 values for a hybrid k3s cluster (Raspberry Pi ARM64 + x86_64), backed by an OpenMediaVault NFS server.
-There is no application source code, build step, linter, or test suite here — the repository *is* the
-deployment configuration, and "correctness" means valid YAML/Helm values that a self-hosted GitHub Actions
-runner applies directly to the live cluster.
+Apart from the IT agent (`agent/it-agent/`, stdlib Python with unit tests in `tests/`; see `docs/it-agent.md`),
+there is no application source code, build step, or linter here — the repository *is* the deployment
+configuration, and "correctness" means valid YAML/Helm values that a self-hosted GitHub Actions runner
+applies directly to the live cluster.
 
 Read [README.md](README.md) first — it has the full architecture diagram, node inventory, storage matrix,
 port allocations, and an "operations runbook" for common debugging questions. Do not duplicate that detail
@@ -16,9 +17,11 @@ here; this file only adds what a Claude session needs to act safely and correctl
 
 ## Two deployment models — know which one a file belongs to
 
-- **Model A — GitOps via CI (`k8s/monitoring/**`, `k8s/storage/**`, `k8s/configs/**`)**: Anything under
-  these paths is auto-deployed to the live cluster by [`.github/workflows/ci.yaml`](.github/workflows/ci.yaml)
-  on every push to `main`. There is no staging environment and no dry-run gate — merging to `main` deploys.
+- **Model A — GitOps via CI**: a push to `main` touching `k8s/monitoring/**`, `k8s/storage/**`,
+  `k8s/configs/**`, `agent/**`, or the workflow itself runs [`.github/workflows/ci.yaml`](.github/workflows/ci.yaml)
+  against the live cluster; its `paths:` list is the authority. `k8s/configs/` manifests are applied from an
+  explicit list in `ci.yaml`, so a new manifest there also needs a line in `ci.yaml`. There is no staging
+  environment and no dry-run gate — merging to `main` deploys.
 - **Model B — direct host manifests**: Some application workloads (npm, mealie, plex, familyTravel,
   cloudflare-ddns, obsidian) are also mirrored as loose YAML files under `/home/mferrin/` directly on the
   `kubeprime` node and applied manually with `sudo k3s kubectl apply -f`. The copies under `k8s/configs/`
@@ -27,15 +30,16 @@ here; this file only adds what a Claude session needs to act safely and correctl
 
 Because pushing to `main` triggers a real deployment to physical hardware, treat changes under `k8s/**` as
 high-blast-radius: confirm with the user before pushing changes to `main` for files that will actually
-redeploy a running service, and always check whether a change is scoped to `k8s/monitoring/**`,
-`k8s/storage/**`, or `k8s/configs/**` before assuming it will (or won't) trigger CI.
+redeploy a running service, and check a change against the `paths:` trigger list in `ci.yaml` before
+assuming it will (or won't) trigger CI.
 
 ## Host-level files (`hosts/**`) are NOT deployed by CI
 
 `hosts/<node>/` holds files that live on a node's own filesystem, outside Kubernetes (currently
 `hosts/yoga-node/90-flannel-heal`, a NetworkManager dispatcher script, `hosts/yoga-node/kiosk-restart.*`, a nightly
 restart of the HA touchscreen kiosk, `hosts/yoga-node/k3s-memory-reserve.yaml`, a k3s drop-in reserving memory for
-Frigate and the kiosk, and `hosts/pinas/` + `hosts/kubeprime/`, the NAS
+Frigate and the kiosk, `hosts/yoga-node/frigate/` (Frigate's compose file, config and setup script),
+and `hosts/pinas/` + `hosts/kubeprime/`, the NAS
 self-heal watchdog, pod-bounce timer and fan installer; see `hosts/pinas/README.md`). `ci.yaml` neither watches nor
 applies this directory, and its runner is on `kubeprime`, so merging a change here installs nothing. The repo
 copy is the source of truth and a record; a human has to install it on the node (each file's header and the
@@ -87,7 +91,7 @@ There's no local build/lint/test cycle. The commands that matter operate on the 
 
 ```bash
 # Validate a values file / manifest is well-formed YAML before pushing
-# (run from a machine with kubectl/helm, or ask the user to run on kubeprime)
+# On kubeprime as shown; from this workstation plain `kubectl` works read-only (see below)
 sudo k3s kubectl get nodes -o wide
 sudo k3s kubectl get pods -A -o wide
 sudo k3s kubectl get pvc -A
@@ -101,8 +105,9 @@ gh workflow run ci.yaml
 
 Because there's no CI dry-run, the closest thing to "testing" a change before it deploys is: check the
 YAML is valid, check the Helm chart's values schema (`helm show values <chart>`) for the fields you're
-setting, and reason about which of the three deploy stages in `ci.yaml` (Helm upgrades → secret
-create/apply → `kubectl apply` of `k8s/configs/**`) your change falls into.
+setting, and find the `ci.yaml` step your change falls into (Helm upgrades with their secrets, the
+dashboards ConfigMap, the explicit `kubectl apply` list for `k8s/configs/`, or the IT-agent deploy) —
+a file no step names is not deployed even when it triggers the workflow.
 
 ## Claude's kubectl access is read-only
 
@@ -125,6 +130,6 @@ directly on the cluster and are *not* managed by `ci.yaml`, so a change to those
 
 - `main` is protected — do not commit directly to it. Create a `feature/<description>` or
   `fix/<description>` branch, commit there, push, and open a PR (`gh pr create`).
-- Remember that merging a PR to `main` immediately deploys anything under `k8s/monitoring/**`,
-  `k8s/storage/**`, or `k8s/configs/**` to the live cluster via the self-hosted runner — factor that into
-  when you suggest merging, not just when you suggest pushing.
+- Merging a PR to `main` immediately deploys anything in `ci.yaml`'s `paths:` list (`k8s/monitoring/**`,
+  `k8s/storage/**`, `k8s/configs/**`, `agent/**`) to the live cluster via the self-hosted runner — factor
+  that into when you suggest merging, not just when you suggest pushing.

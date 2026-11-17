@@ -267,5 +267,8 @@ The TL-SG108E switch (`192.168.8.177`) has no SSH; web UI only.
 - [ ] pinas `GeneralBackup` SMB share holds plaintext secrets (API tokens, app secrets, BitLocker key, 2FA codes): move to Bitwarden, delete, rotate the tokens.
 - [ ] pinas has no off-device backup of the NVMe (media, Google Takeout, all app data).
 - [ ] Disable SSH password auth on the gateway.
+- [ ] Checkmk MCP server ([`mcp/checkmk/`](../mcp/checkmk/README.md), read-only, stdio, runs on the workstation):
+  scaffolded 2026-11-10 and smoke-tested against the live API with bogus credentials (clean 401). Still to do:
+  register it with `grafana_ro` credentials and verify real data.
 - [ ] Remove stale `24.220.158.77` from `~/.ssh/known_hosts`.
 - [ ] Optional: remove `CMK_SECRET` from `~/.bash_profile` and use the Bitwarden CLI instead.
